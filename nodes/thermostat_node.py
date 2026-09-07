@@ -1,79 +1,80 @@
-try:
-    import polyinterface
-except ImportError:
-    import pgc_interface as polyinterface
-    CLOUD = True
-
-from nuheat import NuHeat
-
-LOGGER = polyinterface.LOGGER
+from .base import LOGGER, BaseNode
 
 
-class ThermostatNode_F(polyinterface.Node):
-    def __init__(self, controller, primary, address, name):
-        super(ThermostatNode_F, self).__init__(controller, primary, address, name)
-        self.access_token = None
-        self.NuHeat = None
-        self.temp_uom = controller.temp_uom
+class ThermostatNode_F(BaseNode):
+    def __init__(self, polyglot, primary, address, name, controller=None):
+        if controller is None and hasattr(polyglot, 'poly'):
+            controller = polyglot
+            polyglot = polyglot.poly
+        super(ThermostatNode_F, self).__init__(polyglot, primary, address, name)
+        self.controller = controller
+        self.temp_uom = 17
 
     def start(self):
-        self.access_token = self.controller.polyConfig['customData']['access_token']
-        self.NuHeat = NuHeat(self.access_token)
-        thermostats = self.NuHeat.get_thermostat()
-        if thermostats is not None:
-            for stat in thermostats:
-                if stat['serialNumber'] == self.address:
-                    if self.temp_uom == 17:
-                        clitemp = self.NuHeat.nuheat_celsius_to_fahrenheit(stat['currentTemperature'])
-                        clisph = self.NuHeat.nuheat_celsius_to_fahrenheit(stat['setPointTemp'])
-                    else:
-                        clitemp = self.NuHeat.nuheat_celsius_to_normal(stat['currentTemperature'])
-                        clisph = self.NuHeat.nuheat_celsius_to_normal(stat['setPointTemp'])
+        self.update_info()
 
-                    climd = 0
-                    if stat['operatingMode'] == 1:
-                        climd = 3
-                    elif stat['operatingMode'] == 2:
-                        climd = 1
+    def update_info(self):
+        nuheat_client = getattr(self.controller, 'NuHeat', None)
+        if nuheat_client is None:
+            LOGGER.error("NuHeat client not available on controller")
+            return
 
-                    if stat['isHeating']:
-                        clihcs = 1
-                    else:
-                        clihcs = 0
+        stat = nuheat_client.get_thermostat(self.address)
+        if isinstance(stat, list):
+            found = None
+            for s in stat:
+                if str(s.get('serialNumber')) == str(self.address):
+                    found = s
+                    break
+            stat = found
 
-                    # self.setDriver('ST', clitemp, uom=self.temp_uom)
-                    # self.setDriver('CLISPH', clisph, uom=self.temp_uom)
-                    # self.setDriver('CLIMD', climd, uom=67)
-                    # self.setDriver('CLIHCS', clihcs, uom=66)
-                    self.setDriver('ST', clitemp)
-                    self.setDriver('CLISPH', clisph)
-                    self.setDriver('CLIMD', climd)
-                    self.setDriver('CLIHCS', clihcs)
+        if stat is not None:
+            raw_cur = stat.get('currentTemperature', 0)
+            raw_sp = stat.get('setPointTemperature', stat.get('setPointTemp', 0))
 
-                else:
-                    LOGGER.error("Thermostat Serial Number not available")
+            if self.temp_uom == 17:
+                clitemp = nuheat_client.nuheat_celsius_to_fahrenheit(raw_cur)
+                clisph = nuheat_client.nuheat_celsius_to_fahrenheit(raw_sp)
+            else:
+                clitemp = nuheat_client.nuheat_celsius_to_normal(raw_cur)
+                clisph = nuheat_client.nuheat_celsius_to_normal(raw_sp)
+
+            mode_val = stat.get('mode', stat.get('operatingMode', 1))
+            if mode_val == 1:
+                climd = 3  # Auto
+            else:
+                climd = 1  # Heat / Hold / Manual
+
+            clihcs = 1 if stat.get('isHeating') else 0
+
+            self.setDriver('ST', clitemp)
+            self.setDriver('CLISPH', clisph)
+            self.setDriver('CLIMD', climd)
+            self.setDriver('CLIHCS', clihcs)
         else:
-            LOGGER.error("thermostat_node.Nuheat.get_thermostat: Returned None")
+            LOGGER.error(f"Thermostat {self.address} not available or returned None")
 
     def query(self, command=None):
         self.reportDrivers()
 
     def setpoint_heat(self, command):
-        val = command['value']
+        val = int(command['value'])
+        nuheat_client = getattr(self.controller, 'NuHeat', None)
+        if nuheat_client is None:
+            LOGGER.error("NuHeat client not available on controller")
+            return
 
         if self.temp_uom == 17:
-            new_setpoint = self.NuHeat.nuheat_fahrenheit_to_celsius_json(val)
+            new_setpoint = nuheat_client.nuheat_fahrenheit_to_celsius_json(val)
         else:
-            new_setpoint = self.NuHeat.nuheat_celsius_to_json(val)
+            new_setpoint = nuheat_client.nuheat_celsius_to_json(val)
 
-        _status = self.NuHeat.set_thermostat_setpoint(self.address, new_setpoint)
+        _status = nuheat_client.set_thermostat_setpoint(self.address, new_setpoint)
         if _status is not None:
             self.setDriver('CLISPH', val)
         else:
-            print("thermostat_node.setpoint_heat: " + str(_status))
+            LOGGER.error(f"thermostat_node.setpoint_heat failed for {self.address}")
 
-    # "Hints See: https://github.com/UniversalDevicesInc/hints"
-    # hint = [1, 12, 1, 0]
     drivers = [
         {'driver': 'ST', 'value': 0, 'uom': 17},
         {'driver': 'CLISPH', 'value': 0, 'uom': 17},
@@ -89,67 +90,80 @@ class ThermostatNode_F(polyinterface.Node):
     }
 
 
-class ThermostatNode_C(polyinterface.Node):
-    def __init__(self, controller, primary, address, name):
-        super(ThermostatNode_C, self).__init__(controller, primary, address, name)
-        self.access_token = None
-        self.NuHeat = None
-        self.temp_uom = controller.temp_uom
+class ThermostatNode_C(BaseNode):
+    def __init__(self, polyglot, primary, address, name, controller=None):
+        if controller is None and hasattr(polyglot, 'poly'):
+            controller = polyglot
+            polyglot = polyglot.poly
+        super(ThermostatNode_C, self).__init__(polyglot, primary, address, name)
+        self.controller = controller
+        self.temp_uom = 4
 
     def start(self):
-        self.access_token = self.controller.polyConfig['customData']['access_token']
-        self.NuHeat = NuHeat(self.access_token)
-        thermostats = self.NuHeat.get_thermostat()
-        if thermostats is not None:
-            for stat in thermostats:
-                if stat['serialNumber'] == self.address:
-                    if self.temp_uom == 17:
-                        clitemp = self.NuHeat.nuheat_celsius_to_fahrenheit(stat['currentTemperature'])
-                        clisph = self.NuHeat.nuheat_celsius_to_fahrenheit(stat['setPointTemp'])
-                    else:
-                        clitemp = self.NuHeat.nuheat_celsius_to_normal(stat['currentTemperature'])
-                        clisph = self.NuHeat.nuheat_celsius_to_normal(stat['setPointTemp'])
+        self.update_info()
 
-                    climd = 0
-                    if stat['operatingMode'] == 1:
-                        climd = 3
-                    elif stat['operatingMode'] == 2:
-                        climd = 1
+    def update_info(self):
+        nuheat_client = getattr(self.controller, 'NuHeat', None)
+        if nuheat_client is None:
+            LOGGER.error("NuHeat client not available on controller")
+            return
 
-                    if stat['isHeating']:
-                        clihcs = 1
-                    else:
-                        clihcs = 0
+        stat = nuheat_client.get_thermostat(self.address)
+        if isinstance(stat, list):
+            found = None
+            for s in stat:
+                if str(s.get('serialNumber')) == str(self.address):
+                    found = s
+                    break
+            stat = found
 
-                    self.setDriver('ST', clitemp)
-                    self.setDriver('CLISPH', clisph)
-                    self.setDriver('CLIMD', climd)
-                    self.setDriver('CLIHCS', clihcs)
+        if stat is not None:
+            raw_cur = stat.get('currentTemperature', 0)
+            raw_sp = stat.get('setPointTemperature', stat.get('setPointTemp', 0))
 
-                else:
-                    LOGGER.error("Thermostat Serial Number not available")
+            if self.temp_uom == 17:
+                clitemp = nuheat_client.nuheat_celsius_to_fahrenheit(raw_cur)
+                clisph = nuheat_client.nuheat_celsius_to_fahrenheit(raw_sp)
+            else:
+                clitemp = nuheat_client.nuheat_celsius_to_normal(raw_cur)
+                clisph = nuheat_client.nuheat_celsius_to_normal(raw_sp)
+
+            mode_val = stat.get('mode', stat.get('operatingMode', 1))
+            if mode_val == 1:
+                climd = 3  # Auto
+            else:
+                climd = 1  # Heat / Hold / Manual
+
+            clihcs = 1 if stat.get('isHeating') else 0
+
+            self.setDriver('ST', clitemp)
+            self.setDriver('CLISPH', clisph)
+            self.setDriver('CLIMD', climd)
+            self.setDriver('CLIHCS', clihcs)
         else:
-            LOGGER.error("thermostat_node.Nuheat.get_thermostat: Returned None")
+            LOGGER.error(f"Thermostat {self.address} not available or returned None")
 
     def query(self, command=None):
         self.reportDrivers()
 
     def setpoint_heat(self, command):
-        val = command['value']
+        val = int(command['value'])
+        nuheat_client = getattr(self.controller, 'NuHeat', None)
+        if nuheat_client is None:
+            LOGGER.error("NuHeat client not available on controller")
+            return
 
         if self.temp_uom == 17:
-            new_setpoint = self.NuHeat.nuheat_fahrenheit_to_celsius_json(val)
+            new_setpoint = nuheat_client.nuheat_fahrenheit_to_celsius_json(val)
         else:
-            new_setpoint = self.NuHeat.nuheat_celsius_to_json(val)
+            new_setpoint = nuheat_client.nuheat_celsius_to_json(val)
 
-        _status = self.NuHeat.set_thermostat_setpoint(self.address, new_setpoint)
+        _status = nuheat_client.set_thermostat_setpoint(self.address, new_setpoint)
         if _status is not None:
             self.setDriver('CLISPH', val)
         else:
-            print("thermostat_node.setpoint_heat: " + str(_status))
+            LOGGER.error(f"thermostat_node.setpoint_heat failed for {self.address}")
 
-    # "Hints See: https://github.com/UniversalDevicesInc/hints"
-    # hint = [1, 12, 1, 0]
     drivers = [
         {'driver': 'ST', 'value': 0, 'uom': 4},
         {'driver': 'CLISPH', 'value': 0, 'uom': 4},
@@ -163,3 +177,4 @@ class ThermostatNode_C(polyinterface.Node):
         'QUERY': query,
         'CLISPH': setpoint_heat
     }
+
