@@ -1,48 +1,97 @@
-# NuHeat Signature Nodeserver
+# NuHeat Signature NodeServer
 
-#### Installation
+A Polyglot v3 (PG3 / PG3x) NodeServer for integrating **NuHeat Signature** radiant floor heating thermostats with Universal Devices controllers (eisy / Polisy / IoX).
 
-Install from the Polyglot Cloud store.
+---
 
-#### Requirements
+## Requirements
 
-- ISY994i
-- Polyglot Cloud
-- NuHeat Signature Thermostat(s)
-- [My NuHeat](https://mynuheat.com) Portal account
+- Universal Devices controller (**eisy** or **Polisy**) running **PG3** or **PG3x**
+- One or more **NuHeat Signature** WiFi floor heating thermostats
+- Active **[My NuHeat](https://mynuheat.com)** portal account
+- NuHeat API OAuth credentials (**Client ID** & **Client Secret**)
 
-#### Usage
-- For the Nodeserver to have full control of the thermostat you must change the operating mode on the 
-thermostat.  This is only available on the thermostat display.
-  - Setup -> Preferences
-  - There is an option at the bottom of the screen
-    - Operating Mode:
-  - The choice is selectable if it says "Auto" touch that and change to "Manual"
-  - Changing to "Manual" will disable ALL schedules from the NuHeat app and web interface.
-  
-- On start a notice will be created with a link to step through the NuHeat OAuth process
-- After successful authentication a Nuheat Controller node is created
-  - Open the Admin Console
-  - Select the Nuheat Controller
-  - Click Discover
-  - This will connect to the NuHeat API and discover your connected thermostats
-  - Two nodes should be created.  One for the Thermostat and One for daily energy information
-  - If the energy node is not created click discover again as there is sometimes a timing issue with cloud services
- 
-- Energy Use information depends on what you have configured for each thermostat within the NuHeat configuration.
-This can be done through the NuHeat web interface.
-  - [My NuHeat](https://mynuheat.com) Portal
+---
 
-- Timezone configuration is used to get the correct data for Energy Log retrieval.  Enter
-your timezone in the Polyglot configuration based upon your location or close enough
-to be in the same Day.  A list of acceptable timezones is available here
-  - [List of tz database time zones](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones)
+## Installation
 
-#### Features
-- Creates Thermostat nodes
-- Creates Energy Log node for the daily usage
+1. Open your PG3/PG3x dashboard.
+2. Go to the **NodeServer Store**.
+3. Locate **NuHeat** and click **Install** (or install from your GitHub repository URL).
 
-#### Limitations
-- Scheduling is not configurable through the Nodeserver
-- Mode setting (away) is not yet configurable
-- Tested against a single NuHeat Signature Thermostat.
+---
+
+## OAuth Client Settings
+
+When requesting or configuring your OAuth application with NuHeat, use the following settings:
+
+| Setting | Value |
+| :--- | :--- |
+| **Grant Type** | `Authorization Code` (`authorization_code`) & `Refresh Token` (`offline_access`) |
+| **Return URI (Redirect URI)** | `https://my.isy.io/api/cloudlink/redirect` |
+| **Authorization Endpoint** | `https://identity.mynuheat.com/connect/authorize` |
+| **Token Endpoint** | `https://identity.mynuheat.com/connect/token` |
+| **Scopes** | `openapi openid profile offline_access` |
+
+---
+
+## Configuration
+
+In the PG3 dashboard under the NodeServer's **Configuration** tab, add the following **Custom Configuration Parameters**:
+
+| Key | Type | Description | Default |
+| :--- | :--- | :--- | :--- |
+| `clientId` | string | Your NuHeat OAuth Client ID *(Required)* | *(none)* |
+| `clientSecret` | string | Your NuHeat OAuth Client Secret *(Required)* | *(none)* |
+| `tz` | string | Your local tz database timezone name *(Required for energy logs)* | `America/New_York` |
+
+*Refer to the [tz database time zones list](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) to find your timezone string (e.g., `America/New_York`, `America/Chicago`, `America/Denver`, `America/Los_Angeles`).*
+
+---
+
+## First-Time Setup & Authentication
+
+1. **Enter Credentials**: Save your `clientId`, `clientSecret`, and `tz` in the Custom Configuration Parameters.
+2. **Authenticate**: Click the **Authenticate** button on the NodeServer details page in the PG3 dashboard.
+3. **Log In**: A browser window will open to the NuHeat login page. Sign into your My NuHeat account and grant access.
+4. **Discovery**: Once authentication completes, the NodeServer will automatically discover your connected thermostats and create all device nodes in your Admin Console. You can also trigger discovery manually by clicking **Discover** on the Controller node.
+
+---
+
+## Thermostat Operating Mode
+
+For the NodeServer to have full setpoint control without conflicting with built-in schedules:
+1. On the physical thermostat screen, tap **Setup** → **Preferences**.
+2. Tap **Operating Mode** at the bottom of the screen.
+3. Change the selection from **Auto** to **Manual**.
+4. *(Note: Manual mode disables internal cloud/app schedules so that your ISY/eisy programs have exclusive control).*
+
+---
+
+## Features & Discovered Nodes
+
+The NodeServer automatically detects your account's preferred temperature scale (°F or °C) and creates the following nodes for each thermostat:
+
+- **Controller Node**: Manages connection, authentication status, and discovery.
+- **Thermostat Node (`°F` or `°C`)**:
+  - Reports current floor temperature and target setpoint.
+  - Reports heating status (idle / heating).
+  - Set target heating temperature directly from programs and Admin Console.
+- **Energy Log Nodes**:
+  - **Energy Log - Day**: Daily power consumption (watt-hours).
+  - **Energy Log - Week**: Weekly power consumption (watt-hours).
+  - **Energy Log - Year**: Yearly power consumption (watt-hours).
+
+---
+
+## Polling
+
+- **Short Poll (default 300s)**: Queries thermostat status, temperature, and heating activity.
+- **Long Poll (default 900s)**: Updates energy usage metrics.
+
+---
+
+## Limitations
+
+- Internal thermostat scheduling is not edited through the NodeServer (use ISY programs instead).
+- Mode changes (e.g. Away mode) are currently managed via the NuHeat app or physical thermostat.
