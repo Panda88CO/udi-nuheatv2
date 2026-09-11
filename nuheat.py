@@ -9,6 +9,7 @@ try:
     import udi_interface
     Custom = udi_interface.Custom
     OAuth = udi_interface.OAuth
+
 except ImportError:
 
     class Custom:
@@ -233,8 +234,10 @@ class Controller(BaseNode):
 
 if __name__ == "__main__":
     try:
+        LOGGER.info('Starting NuHeat Polyglot interface...')
+
         polyglot = udi_interface.Interface([])
-        polyglot.start('2.0.0')
+        polyglot.start('2.0.1')
         control = Controller(polyglot, 'controller', 'controller', 'NuHeat')
         polyglot.ready()
         polyglot.runForever()
