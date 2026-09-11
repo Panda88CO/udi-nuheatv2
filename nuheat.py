@@ -237,7 +237,7 @@ if __name__ == "__main__":
         LOGGER.info('Starting NuHeat Polyglot interface...')
 
         polyglot = udi_interface.Interface([])
-        polyglot.start('2.0.1')
+        polyglot.start('2.0.2')
         control = Controller(polyglot, 'controller', 'controller', 'NuHeat')
         polyglot.ready()
         polyglot.runForever()
