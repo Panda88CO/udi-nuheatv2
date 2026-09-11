@@ -18,6 +18,7 @@ class TestPG3Nodes(unittest.TestCase):
         self.mock_poly.Notices = {}
         self.mock_poly.addNode = MagicMock()
         self.mock_poly.getNodes.return_value = {}
+        self.mock_poly.getNode.return_value = None
 
     def test_controller_init_and_token(self):
         controller = Controller(self.mock_poly, 'controller', 'controller', 'NuHeat')
@@ -74,6 +75,28 @@ class TestPG3Nodes(unittest.TestCase):
         # Should have added 1 controller node + 1 thermostat node + 3 energy nodes = 5 nodes
         self.assertEqual(self.mock_poly.addNode.call_count, 5)
 
+    def test_controller_discover_migrates_existing_node(self):
+        controller = Controller(self.mock_poly, 'controller', 'controller', 'NuHeat')
+        controller.get_access_token = MagicMock(return_value='valid_token')
+
+        controller.NuHeat.get_account = MagicMock(return_value={'temperatureScale': 'Fahrenheit'})
+        controller.NuHeat.get_thermostat = MagicMock(return_value=[{
+            'serialNumber': '99887766',
+            'name': 'Guest Bath',
+            'currentTemperature': 2100,
+            'setPointTemperature': 2200,
+            'mode': 2,
+            'isHeating': True
+        }])
+
+        existing_node = MagicMock()
+        existing_node.primary = 'controller'
+        self.mock_poly.getNode = MagicMock(return_value=existing_node)
+        self.mock_poly.delNode = MagicMock()
+
+        controller.discover()
+        self.mock_poly.delNode.assert_called_once_with('99887766')
+
     def test_thermostat_node_f(self):
         controller = MagicMock()
         controller.NuHeat = MagicMock()
@@ -89,6 +112,7 @@ class TestPG3Nodes(unittest.TestCase):
         controller.NuHeat.set_thermostat_setpoint.return_value = True
 
         node = ThermostatNode_F(self.mock_poly, 'controller', '99887766', 'Guest Bath', controller)
+        node = ThermostatNode_F(self.mock_poly, '99887766', '99887766', 'Guest Bath', controller)
         node.setDriver = MagicMock()
 
         # Test update_info

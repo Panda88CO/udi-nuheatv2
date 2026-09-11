@@ -11,6 +11,7 @@ class EnergyLogDayNode(BaseNode):
             polyglot = polyglot.poly
         super(EnergyLogDayNode, self).__init__(polyglot, primary, address, name)
         self.controller = controller
+        self.stat_address = address[3:] if address.startswith('eld') else primary
 
     def start(self):
         self.update_info()
@@ -28,12 +29,15 @@ class EnergyLogDayNode(BaseNode):
             date_str = datetime.now(pytz.timezone('America/New_York')).strftime('%Y-%m-%d')
 
         energy_used = nuheat_client.get_energy_log_day(self.primary, date_str)
+        stat_id = getattr(self, 'stat_address', self.primary)
+        energy_used = nuheat_client.get_energy_log_day(stat_id, date_str)
         if energy_used is not None:
             self.setDriver('GV0', energy_used[0], uom=45)
             self.setDriver('ST', energy_used[1], uom=33)
             self.setDriver('GV1', energy_used[2], uom=103)
         else:
             LOGGER.error(f"Energy Log Day returned None for {self.primary}")
+            LOGGER.error(f"Energy Log Day returned None for {stat_id}")
 
     def query(self, command=None):
         self.reportDrivers()

@@ -274,10 +274,34 @@ class Controller(BaseNode):
             if not callable(add_node):
                 continue
 
+            # In ISY, child nodes require their parent (primaryNode) to be a primary node (address == primary).
+            # If the thermostat was previously registered with primaryNode='controller', remove it first
+            # so it can be cleanly recreated as a primary node.
+            existing_node = None
+            if hasattr(self.poly, '_nodes') and isinstance(self.poly._nodes, dict):
+                existing_node = self.poly._nodes.get(stat_address)
+            if existing_node is None and hasattr(self.poly, 'getNode'):
+                existing_node = self.poly.getNode(stat_address)
+            elif existing_node is None and hasattr(self, 'nodes') and isinstance(self.nodes, dict):
+                existing_node = self.nodes.get(stat_address)
+
+            if existing_node is not None:
+                current_primary = None
+                if isinstance(existing_node, dict):
+                    current_primary = existing_node.get('primaryNode') or existing_node.get('primary')
+                else:
+                    current_primary = getattr(existing_node, 'primary', None) or getattr(existing_node, 'primaryNode', None)
+
+                if current_primary and current_primary != stat_address:
+                    LOGGER.info(f"Node {stat_address} currently has parent '{current_primary}'. Removing so it can be created as primary node...")
+                    if hasattr(self.poly, 'delNode'):
+                        self.poly.delNode(stat_address)
+                        time.sleep(1)
+
             if self.temp_uom == 17:
-                add_node(ThermostatNode_F(self.poly, self.address, stat_address, name, self))
+                add_node(ThermostatNode_F(self.poly, stat_address, stat_address, name, self))
             else:
-                add_node(ThermostatNode_C(self.poly, self.address, stat_address, name, self))
+                add_node(ThermostatNode_C(self.poly, stat_address, stat_address, name, self))
 
             time.sleep(0.5)
             add_node(EnergyLogDayNode(self.poly, stat_address, energy_log_day_address, f"{name} Energy-Day", self))
