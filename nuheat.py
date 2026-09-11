@@ -1,7 +1,7 @@
-#!/usr/bin/env python3
 import sys
 import time
 import requests
+import threading
 
 from nodes.base import LOGGER, BaseNode
 
@@ -70,6 +70,12 @@ class Controller(BaseNode):
         self.tz = "America/New_York"
         self.disco = 0
 
+        # Thread synchronization flags
+        self.handleCustomParamsDone = False
+        self.customNsHandlerDone = False
+        self.configDone = False
+        self.oauth_lock = threading.Lock()
+
         if hasattr(self.poly, 'addNode'):
             self.poly.addNode(self)
 
@@ -80,6 +86,8 @@ class Controller(BaseNode):
             self.poly.subscribe(self.poly.CUSTOMNS, self.customNsHandler)
             self.poly.subscribe(self.poly.OAUTH, self.oauthHandler)
             self.poly.subscribe(self.poly.CUSTOMPARAMS, self.customParamsHandler)
+            if hasattr(self.poly, 'CONFIGDONE'):
+                self.poly.subscribe(self.poly.CONFIGDONE, self.configDoneHandler)
             self.poly.subscribe(self.poly.DISCOVER, self.discover)
 
     def get_access_token(self):
@@ -90,29 +98,31 @@ class Controller(BaseNode):
             return None
 
     def update_oauth_config(self):
-        client_id = self.customParams.get('clientId') or self.customParams.get('client_id')
-        client_secret = self.customParams.get('clientSecret') or self.customParams.get('client_secret')
-        if client_id and client_secret:
-            oauth_cfg = {
-                'name': 'Nuheat',
-                'client_id': client_id,
-                'client_secret': client_secret,
-                'auth_endpoint': 'https://identity.mynuheat.com/connect/authorize',
-                'token_endpoint': 'https://identity.mynuheat.com/connect/token',
-                'scope': 'openapi openid offline_access',
-                'addScope': True,
-                'addRedirect': True
-            }
-            if hasattr(self.oauth, 'updateOauthSettings'):
-                self.oauth.updateOauthSettings(oauth_cfg)
-            else:
-                self.oauth.customNsHandler('oauth', oauth_cfg)
+        with self.oauth_lock:
+            client_id = self.customParams.get('clientId') or self.customParams.get('client_id')
+            client_secret = self.customParams.get('clientSecret') or self.customParams.get('client_secret')
+            if client_id and client_secret:
+                oauth_cfg = {
+                    'name': 'Nuheat',
+                    'client_id': client_id,
+                    'client_secret': client_secret,
+                    'auth_endpoint': 'https://identity.mynuheat.com/connect/authorize',
+                    'token_endpoint': 'https://identity.mynuheat.com/connect/token',
+                    'scope': 'openapi openid offline_access',
+                    'addScope': True,
+                    'addRedirect': True
+                }
+                if hasattr(self.oauth, 'updateOauthSettings'):
+                    self.oauth.updateOauthSettings(oauth_cfg)
+                else:
+                    self.oauth.customNsHandler('oauth', oauth_cfg)
 
-            # Explicitly persist oauth config to Polyglot so PG3 has it for the Authenticate button
-            if hasattr(self.poly, 'send'):
-                self.poly.send({'set': [{'key': 'oauth', 'value': oauth_cfg}]}, 'custom')
+                # Explicitly persist oauth config to Polyglot so PG3 has it for the Authenticate button
+                if hasattr(self.poly, 'send'):
+                    self.poly.send({'set': [{'key': 'oauth', 'value': oauth_cfg}]}, 'custom')
 
     def customNsHandler(self, key, data):
+        LOGGER.debug(f"customNsHandler called for {key}")
         try:
             # Polyglot sends empty customns values as empty strings ('') instead of dicts
             if isinstance(data, str):
@@ -127,14 +137,27 @@ class Controller(BaseNode):
                 override = getattr(self.oauth, '_oauthConfigOverride', {})
                 if not data and not (override and override.get('client_id')):
                     LOGGER.info("OAuth configuration is pending credentials in PG3 configuration.")
+                    self.customNsHandlerDone = True
                     return
 
             self.oauth.customNsHandler(key, data or {})
+            self.customNsHandlerDone = True
+            LOGGER.debug(f"customNsHandler finished for {key}")
         except Exception as e:
             LOGGER.error(f"Error handling customNs {key}: {e}")
 
+    def configDoneHandler(self):
+        LOGGER.info("configDoneHandler: PG3 initial configuration messages complete.")
+        self.configDone = True
+        self.update_oauth_config()
+
     def oauthHandler(self, token):
         try:
+            wait_seconds = 0
+            while not self.handleCustomParamsDone and wait_seconds < 5:
+                time.sleep(0.5)
+                wait_seconds += 0.5
+
             self.oauth.oauthHandler(token)
             if hasattr(self.Notices, 'delete'):
                 self.Notices.delete('auth')
@@ -144,6 +167,7 @@ class Controller(BaseNode):
             LOGGER.error(f"Error in oauthHandler: {e}")
 
     def customParamsHandler(self, data):
+        LOGGER.debug(f"customParamsHandler called with {len(data) if hasattr(data, '__len__') else 'unknown'} params")
         self.customParams.load(data)
         if 'tz' in self.customParams and self.customParams['tz']:
             self.tz = self.customParams['tz']
@@ -152,9 +176,20 @@ class Controller(BaseNode):
             self.customParams['tz'] = self.tz
 
         self.update_oauth_config()
+        self.handleCustomParamsDone = True
+        LOGGER.debug("customParamsHandler finished")
 
     def start(self):
         LOGGER.info('Starting NuHeat NodeServer...')
+
+        # In PG3 multi-threaded startup, ensure customParams and customNs have had time to finish
+        wait_seconds = 0
+        while not (self.handleCustomParamsDone and (self.configDone or wait_seconds >= 5)) and wait_seconds < 10:
+            LOGGER.debug(f"Waiting for custom parameters to complete before start ({wait_seconds:.1f}s)...")
+            time.sleep(0.5)
+            wait_seconds += 0.5
+
+        self.update_oauth_config()
         self.setDriver('ST', 1)
         if hasattr(self.poly, 'updateProfile'):
             self.poly.updateProfile()

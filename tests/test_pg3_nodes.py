@@ -31,6 +31,7 @@ class TestPG3Nodes(unittest.TestCase):
 
     def test_controller_oauth_handler(self):
         controller = Controller(self.mock_poly, 'controller', 'controller', 'NuHeat')
+        controller.handleCustomParamsDone = True
         controller.discover = MagicMock()
         controller.oauth.oauthHandler = MagicMock()
 
@@ -70,8 +71,8 @@ class TestPG3Nodes(unittest.TestCase):
 
         controller.discover()
         self.assertEqual(controller.disco, 1)
-        # Should have added 1 thermostat node + 3 energy nodes = 4 nodes
-        self.assertEqual(self.mock_poly.addNode.call_count, 4)
+        # Should have added 1 controller node + 1 thermostat node + 3 energy nodes = 5 nodes
+        self.assertEqual(self.mock_poly.addNode.call_count, 5)
 
     def test_thermostat_node_f(self):
         controller = MagicMock()
