@@ -40,7 +40,7 @@ class TestPG3Nodes(unittest.TestCase):
 
     def test_controller_custom_params_handler(self):
         controller = Controller(self.mock_poly, 'controller', 'controller', 'NuHeat')
-        controller.oauth.customNsHandler = MagicMock()
+        controller.oauth.updateOauthSettings = MagicMock()
 
         params = {
             'tz': 'America/Chicago',
@@ -49,11 +49,10 @@ class TestPG3Nodes(unittest.TestCase):
         }
         controller.customParamsHandler(params)
         self.assertEqual(controller.tz, 'America/Chicago')
-        controller.oauth.customNsHandler.assert_called_once()
-        call_args = controller.oauth.customNsHandler.call_args[0]
-        self.assertEqual(call_args[0], 'oauth')
-        self.assertEqual(call_args[1]['client_id'], 'my_client_id')
-        self.assertEqual(call_args[1]['client_secret'], 'my_client_secret')
+        controller.oauth.updateOauthSettings.assert_called_once()
+        call_args = controller.oauth.updateOauthSettings.call_args[0]
+        self.assertEqual(call_args[0]['client_id'], 'my_client_id')
+        self.assertEqual(call_args[0]['client_secret'], 'my_client_secret')
 
     def test_controller_discover(self):
         controller = Controller(self.mock_poly, 'controller', 'controller', 'NuHeat')

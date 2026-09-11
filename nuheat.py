@@ -28,11 +28,20 @@ except ImportError:
 
     class OAuth:
         def __init__(self, *args, **kwargs):
-            pass
+            self._oauthConfig = {}
+            self._oauthConfigOverride = {}
+            self._oauthConfigInitialized = False
         def getAccessToken(self):
             return None
         def customNsHandler(self, key, data):
-            pass
+            if key == 'oauth':
+                if isinstance(data, dict):
+                    self._oauthConfig.update(data)
+                self._oauthConfig.update(self._oauthConfigOverride)
+                self._oauthConfigInitialized = True
+        def updateOauthSettings(self, update):
+            self._oauthConfigOverride = update or {}
+            self._oauthConfig.update(self._oauthConfigOverride)
         def oauthHandler(self, token):
             pass
 
@@ -61,6 +70,9 @@ class Controller(BaseNode):
         self.tz = "America/New_York"
         self.disco = 0
 
+        if hasattr(self.poly, 'addNode'):
+            self.poly.addNode(self)
+
         # Subscribe to PG3 events if the interface supports event subscriptions
         if hasattr(self.poly, 'subscribe'):
             self.poly.subscribe(self.poly.START, self.start, address)
@@ -77,8 +89,38 @@ class Controller(BaseNode):
             LOGGER.debug(f"NuHeat getAccessToken: {e}")
             return None
 
+    def update_oauth_config(self):
+        client_id = self.customParams.get('clientId') or self.customParams.get('client_id')
+        client_secret = self.customParams.get('clientSecret') or self.customParams.get('client_secret')
+        if client_id and client_secret:
+            oauth_cfg = {
+                'name': 'Nuheat',
+                'client_id': client_id,
+                'client_secret': client_secret,
+                'auth_endpoint': 'https://identity.mynuheat.com/connect/authorize',
+                'token_endpoint': 'https://identity.mynuheat.com/connect/token',
+                'scope': 'openapi openid profile offline_access',
+                'addScope': True,
+                'addRedirect': True
+            }
+            if hasattr(self.oauth, 'updateOauthSettings'):
+                self.oauth.updateOauthSettings(oauth_cfg)
+            else:
+                self.oauth.customNsHandler('oauth', oauth_cfg)
+
     def customNsHandler(self, key, data):
         try:
+            if key == 'oauth':
+                # Ensure OAuth config override is set from customparams if present
+                self.update_oauth_config()
+
+                # If PG3 sends empty oauth data and no credentials have been entered yet,
+                # do not pass empty data to self.oauth to avoid spurious error logs
+                override = getattr(self.oauth, '_oauthConfigOverride', {})
+                if not data and not (override and override.get('client_id')):
+                    LOGGER.info("OAuth configuration is pending credentials in PG3 configuration.")
+                    return
+
             self.oauth.customNsHandler(key, data)
         except Exception as e:
             LOGGER.error(f"Error handling customNs {key}: {e}")
@@ -101,20 +143,7 @@ class Controller(BaseNode):
             self.tz = "America/New_York"
             self.customParams['tz'] = self.tz
 
-        client_id = self.customParams.get('clientId') or self.customParams.get('client_id')
-        client_secret = self.customParams.get('clientSecret') or self.customParams.get('client_secret')
-        if client_id and client_secret:
-            oauth_cfg = {
-                'name': 'Nuheat',
-                'client_id': client_id,
-                'client_secret': client_secret,
-                'auth_endpoint': 'https://identity.mynuheat.com/connect/authorize',
-                'token_endpoint': 'https://identity.mynuheat.com/connect/token',
-                'scope': 'openapi openid profile offline_access',
-                'addScope': True,
-                'addRedirect': True
-            }
-            self.oauth.customNsHandler('oauth', oauth_cfg)
+        self.update_oauth_config()
 
     def start(self):
         LOGGER.info('Starting NuHeat NodeServer...')
@@ -238,6 +267,8 @@ if __name__ == "__main__":
 
         polyglot = udi_interface.Interface([])
         polyglot.start('2.0.2')
+        if hasattr(polyglot, 'setCustomParamsDoc'):
+            polyglot.setCustomParamsDoc()
         control = Controller(polyglot, 'controller', 'controller', 'NuHeat')
         polyglot.ready()
         polyglot.runForever()
