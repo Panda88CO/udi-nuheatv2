@@ -99,7 +99,7 @@ class Controller(BaseNode):
                 'client_secret': client_secret,
                 'auth_endpoint': 'https://identity.mynuheat.com/connect/authorize',
                 'token_endpoint': 'https://identity.mynuheat.com/connect/token',
-                'scope': 'openapi openid profile offline_access',
+                'scope': 'openapi openid offline_access',
                 'addScope': True,
                 'addRedirect': True
             }
@@ -108,8 +108,16 @@ class Controller(BaseNode):
             else:
                 self.oauth.customNsHandler('oauth', oauth_cfg)
 
+            # Explicitly persist oauth config to Polyglot so PG3 has it for the Authenticate button
+            if hasattr(self.poly, 'send'):
+                self.poly.send({'set': [{'key': 'oauth', 'value': oauth_cfg}]}, 'custom')
+
     def customNsHandler(self, key, data):
         try:
+            # Polyglot sends empty customns values as empty strings ('') instead of dicts
+            if isinstance(data, str):
+                data = {}
+
             if key == 'oauth':
                 # Ensure OAuth config override is set from customparams if present
                 self.update_oauth_config()
@@ -121,7 +129,7 @@ class Controller(BaseNode):
                     LOGGER.info("OAuth configuration is pending credentials in PG3 configuration.")
                     return
 
-            self.oauth.customNsHandler(key, data)
+            self.oauth.customNsHandler(key, data or {})
         except Exception as e:
             LOGGER.error(f"Error handling customNs {key}: {e}")
 
