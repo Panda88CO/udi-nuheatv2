@@ -1,3 +1,4 @@
+import json
 import sys
 import time
 import requests
@@ -45,6 +46,7 @@ except ImportError:
         def oauthHandler(self, token):
             pass
 
+from nodes import ThermostatNode
 from nodes import ThermostatNode_F
 from nodes import ThermostatNode_C
 from nodes import EnergyLogDayNode
@@ -53,9 +55,145 @@ from nodes import EnergyLogYearNode
 from nuheat import NuHeat
 
 
+def _build_profile_definition(temp_unit: str = "F") -> dict:
+    """Build the dynamic JSON profile definition for PG3/PG3x.
+
+    CLITEMP supports both temperature UOMs: 'F' -> 17 and 'C' -> 4.
+    """
+    if temp_unit == "C":
+        clitemp_ranges = [
+            {"uom": "4", "min": 5, "max": 40, "step": 1, "prec": 0},
+            {"uom": "17", "min": 41, "max": 104, "step": 1, "prec": 0},
+        ]
+    else:
+        clitemp_ranges = [
+            {"uom": "17", "min": 41, "max": 104, "step": 1, "prec": 0},
+            {"uom": "4", "min": 5, "max": 40, "step": 1, "prec": 0},
+        ]
+
+    editors = [
+        {
+            "id": "bool",
+            "ranges": [
+                {"uom": "2", "subset": "0-1", "names": {"0": "Offline", "1": "Online"}}
+            ],
+        },
+        {
+            "id": "CLIHCS",
+            "ranges": [
+                {"uom": "66", "subset": "0-1", "names": {"0": "Idle", "1": "Heating"}}
+            ],
+        },
+        {
+            "id": "CLIMD",
+            "ranges": [
+                {"uom": "67", "subset": "1,3", "names": {"1": "Heat / Manual", "3": "Auto / Schedule"}}
+            ],
+        },
+        {
+            "id": "CLITEMP",
+            "ranges": clitemp_ranges,
+        },
+        {
+            "id": "TPW",
+            "ranges": [
+                {"uom": "33", "min": 0, "max": 10000, "prec": 2}
+            ],
+        },
+        {
+            "id": "GV0",
+            "ranges": [
+                {"uom": "45", "min": 0, "max": 43830, "prec": 0}
+            ],
+        },
+        {
+            "id": "GV1",
+            "ranges": [
+                {"uom": "103", "min": 0, "max": 10000, "prec": 2}
+            ],
+        },
+        {
+            "id": "timestamp",
+            "ranges": [
+                {"uom": "151", "min": 0, "max": 4294967295, "prec": 0}
+            ],
+        },
+    ]
+
+    nodedefs = [
+        {
+            "id": "controller",
+            "name": "NuHeat Signature Controller",
+            "icon": "Thermostat",
+            "properties": [
+                {"id": "ST", "name": "NodeServer Online", "editor": "bool"},
+                {"id": "TIME", "name": "Last Update", "editor": "timestamp"},
+            ],
+            "cmds": {
+                "accepts": [
+                    {"id": "QUERY", "name": "Query"},
+                    {"id": "DISCOVER", "name": "Discover"},
+                    {"id": "UPDATE_PROFILE", "name": "Update Profile"},
+                ],
+                "sends": [],
+            },
+            "links": {"ctl": [], "rsp": []},
+        },
+        {
+            "id": "THERMOSTAT",
+            "name": "Thermostat Node",
+            "icon": "Thermostat",
+            "properties": [
+                {"id": "ST", "name": "Current Temperature", "editor": "CLITEMP"},
+                {"id": "CLISPH", "name": "Heat Setpoint", "editor": "CLITEMP"},
+                {"id": "CLIMD", "name": "Thermostat Mode", "editor": "CLIMD"},
+                {"id": "CLIHCS", "name": "Heat State", "editor": "CLIHCS"},
+                {"id": "TIME", "name": "Last Update", "editor": "timestamp"},
+            ],
+            "cmds": {
+                "accepts": [
+                    {"id": "QUERY", "name": "Query"},
+                    {
+                        "id": "CLISPH",
+                        "name": "Heat Setpoint",
+                        "params": [
+                            {"id": "", "name": "Temperature", "editor": "CLITEMP", "init": "CLISPH"}
+                        ],
+                    },
+                ],
+                "sends": [],
+            },
+            "links": {"ctl": [], "rsp": []},
+        },
+        {
+            "id": "ENERGYLOG",
+            "name": "Energy Log Node",
+            "icon": "EnergyMonitor",
+            "properties": [
+                {"id": "ST", "name": "Energy Used", "editor": "TPW"},
+                {"id": "GV0", "name": "Energy Minutes", "editor": "GV0"},
+                {"id": "GV1", "name": "Energy Cost", "editor": "GV1"},
+                {"id": "TIME", "name": "Last Update", "editor": "timestamp"},
+            ],
+            "cmds": {
+                "accepts": [
+                    {"id": "QUERY", "name": "Query"},
+                ],
+                "sends": [],
+            },
+            "links": {"ctl": [], "rsp": []},
+        },
+    ]
+
+    return {"editors": editors, "nodedefs": nodedefs, "linkdefs": []}
+
+
 class Controller(BaseNode):
     id = 'controller'
-    drivers = [{'driver': 'ST', 'value': 1, 'uom': 2}]
+    drivers = [
+        {'driver': 'ST', 'value': 1, 'uom': 2},
+        {'driver': 'TIME', 'value': 0, 'uom': 151}
+    ]
 
     def __init__(self, polyglot, primary='controller', address='controller', name='NuHeat'):
         super(Controller, self).__init__(polyglot, primary, address, name)
@@ -66,9 +204,14 @@ class Controller(BaseNode):
         self.oauth = OAuth(polyglot)
         self.NuHeat = NuHeat(token_or_provider=self.get_access_token)
         self.temperature_scale = None
+        self.temp_unit = "F"
         self.temp_uom = 17
         self.tz = "America/New_York"
         self.disco = 0
+
+        # Confirmation tracking
+        self._confirmed_node_addresses = set()
+        self._deleted_node_addresses = set()
 
         # Thread synchronization flags
         self.handleCustomParamsDone = False
@@ -88,7 +231,112 @@ class Controller(BaseNode):
             self.poly.subscribe(self.poly.CUSTOMPARAMS, self.customParamsHandler)
             if hasattr(self.poly, 'CONFIGDONE'):
                 self.poly.subscribe(self.poly.CONFIGDONE, self.configDoneHandler)
+            if hasattr(self.poly, 'ADDNODEDONE'):
+                self.poly.subscribe(self.poly.ADDNODEDONE, self.node_done)
+            if hasattr(self.poly, 'DELNODEDONE'):
+                self.poly.subscribe(self.poly.DELNODEDONE, self.node_deleted)
             self.poly.subscribe(self.poly.DISCOVER, self.discover)
+
+    def node_done(self, node):
+        address = getattr(node, "address", None)
+        if address is None and isinstance(node, dict):
+            address = node.get("address") or node.get("node")
+        if address:
+            self._confirmed_node_addresses.add(address)
+        LOGGER.debug(f"[node_done] Node {address or 'unknown'} is done")
+
+    def node_deleted(self, node):
+        address = getattr(node, "address", None)
+        if address is None and isinstance(node, dict):
+            address = node.get("address") or node.get("node")
+        if address:
+            self._deleted_node_addresses.add(address)
+            self._confirmed_node_addresses.discard(address)
+        LOGGER.debug(f"[node_deleted] Node {address or 'unknown'} deletion complete")
+
+    def _wait_for_node_confirmed(self, address: str, timeout: float = 10.0) -> bool:
+        """Block until PG3 sends ADDNODEDONE for *address*, or timeout expires."""
+        if address in self._confirmed_node_addresses:
+            LOGGER.debug(f"[_wait_for_node_confirmed] Node {address} already confirmed")
+            return True
+
+        event = threading.Event()
+
+        def _handler(node):
+            node_addr = getattr(node, "address", None)
+            if node_addr is None and isinstance(node, dict):
+                node_addr = node.get("address") or node.get("node")
+            if node_addr == address:
+                event.set()
+
+        if hasattr(self.poly, 'subscribe') and hasattr(self.poly, 'ADDNODEDONE'):
+            self.poly.subscribe(self.poly.ADDNODEDONE, _handler)
+            if address in self._confirmed_node_addresses:
+                if hasattr(self.poly, 'unsubscribe'):
+                    self.poly.unsubscribe(self.poly.ADDNODEDONE, _handler)
+                LOGGER.debug(f"[_wait_for_node_confirmed] Node {address} confirmed before local wait")
+                return True
+            confirmed = event.wait(timeout=timeout)
+            if hasattr(self.poly, 'unsubscribe'):
+                self.poly.unsubscribe(self.poly.ADDNODEDONE, _handler)
+            if not confirmed:
+                LOGGER.warning(f"[_wait_for_node_confirmed] Timeout waiting for PG3 to confirm node {address}")
+            else:
+                LOGGER.debug(f"[_wait_for_node_confirmed] PG3 confirmed node {address}")
+            return confirmed
+        return True
+
+    def _profiles_match(self, current_profile, expected_profile) -> bool:
+        if not isinstance(current_profile, dict) or not isinstance(expected_profile, dict):
+            return False
+        return all(
+            current_profile.get(k, []) == expected_profile.get(k, [])
+            for k in ("editors", "nodedefs", "linkdefs")
+        )
+
+    def _publish_profile(self, wait_response: bool = False) -> None:
+        update_json_profile = getattr(self.poly, "updateJsonProfile", None)
+        if not callable(update_json_profile):
+            LOGGER.info("[_publish_profile] updateJsonProfile is unavailable, falling back to updateProfile")
+            if hasattr(self.poly, "updateProfile"):
+                self.poly.updateProfile()
+            return
+
+        profile = _build_profile_definition(self.temp_unit)
+
+        current_profile_getter = getattr(self.poly, "getJsonProfile", None)
+        if callable(current_profile_getter):
+            try:
+                current_profile = current_profile_getter({"waitResponse": False})
+                if self._profiles_match(current_profile, profile):
+                    LOGGER.info("[_publish_profile] Profile already up to date, skipping publish")
+                    return
+            except TypeError:
+                try:
+                    current_profile = current_profile_getter()
+                    if self._profiles_match(current_profile, profile):
+                        LOGGER.info("[_publish_profile] Profile already up to date, skipping publish")
+                        return
+                except Exception as err:
+                    LOGGER.warning(f"[_publish_profile] Unable to read existing profile: {err}")
+            except Exception as err:
+                LOGGER.warning(f"[_publish_profile] Unable to read existing profile: {err}")
+
+        try:
+            LOGGER.debug(f"[_publish_profile] Publishing profile: {json.dumps(profile, sort_keys=True, indent=2)}")
+            update_json_profile(profile, {"waitResponse": wait_response})
+            LOGGER.info("[_publish_profile] Dynamic JSON profile published successfully")
+            if hasattr(self.poly, "Notices") and hasattr(self.poly.Notices, "delete"):
+                self.poly.Notices.delete("profile")
+        except TypeError:
+            update_json_profile(profile)
+            LOGGER.info("[_publish_profile] Dynamic JSON profile published successfully")
+            if hasattr(self.poly, "Notices") and hasattr(self.poly.Notices, "delete"):
+                self.poly.Notices.delete("profile")
+        except Exception as err:
+            LOGGER.error(f"[_publish_profile] Profile publish failed: {err}")
+            if hasattr(self.poly, "Notices") and hasattr(self.poly.Notices, "__setitem__"):
+                self.poly.Notices["profile"] = f"Dynamic profile publish failed: {err}"
 
     def get_access_token(self):
         try:
@@ -175,6 +423,18 @@ class Controller(BaseNode):
             self.tz = "America/New_York"
             self.customParams['tz'] = self.tz
 
+        prev_temp_unit = self.temp_unit
+        raw_unit = str(self.customParams.get('TEMP_UNIT') or '').strip().upper()
+        if raw_unit in ('C', 'CELSIUS'):
+            self.temp_unit = 'C'
+            self.temp_uom = 4
+        elif raw_unit in ('F', 'FAHRENHEIT'):
+            self.temp_unit = 'F'
+            self.temp_uom = 17
+
+        if self.temp_unit != prev_temp_unit:
+            self._publish_profile()
+
         self.update_oauth_config()
         self.handleCustomParamsDone = True
         LOGGER.debug("customParamsHandler finished")
@@ -190,9 +450,9 @@ class Controller(BaseNode):
             wait_seconds += 0.5
 
         self.update_oauth_config()
-        self.setDriver('ST', 1)
-        if hasattr(self.poly, 'updateProfile'):
-            self.poly.updateProfile()
+        self.setDriver('ST', 1, uom=2)
+        self.setDriver('TIME', int(time.time()), uom=151)
+        self._publish_profile()
 
         token = self.get_access_token()
         if token:
@@ -205,6 +465,7 @@ class Controller(BaseNode):
                 self.Notices['auth'] = "Please click 'Authenticate' in the PG3 dashboard to link your NuHeat account."
 
     def poll(self, polltype):
+        self.setDriver('TIME', int(time.time()), uom=151)
         if 'shortPoll' in polltype:
             self.shortPoll()
         elif 'longPoll' in polltype:
@@ -229,6 +490,7 @@ class Controller(BaseNode):
                     node.update_info()
 
     def query(self, command=None):
+        self.setDriver('TIME', int(time.time()), uom=151)
         self.reportDrivers()
         get_nodes = getattr(self.poly, 'getNodes', None)
         nodes = get_nodes() if callable(get_nodes) else getattr(self, 'nodes', {})
@@ -248,12 +510,21 @@ class Controller(BaseNode):
         if hasattr(self.Notices, 'delete'):
             self.Notices.delete('auth')
 
-        account_info = self.NuHeat.get_account()
-        if account_info:
-            self.temperature_scale = account_info.get('temperatureScale', 'Fahrenheit')
-            self.temp_uom = 17 if self.temperature_scale == "Fahrenheit" else 4
-        else:
-            self.temp_uom = 17
+        raw_unit = str(self.customParams.get('TEMP_UNIT') or '').strip().upper()
+        if not raw_unit:
+            account_info = self.NuHeat.get_account()
+            if account_info:
+                self.temperature_scale = account_info.get('temperatureScale', 'Fahrenheit')
+                if self.temperature_scale.lower().startswith('c'):
+                    self.temp_unit = "C"
+                    self.temp_uom = 4
+                else:
+                    self.temp_unit = "F"
+                    self.temp_uom = 17
+            else:
+                self.temp_unit = "F"
+                self.temp_uom = 17
+            self._publish_profile()
 
         thermostats = self.NuHeat.get_thermostat()
         if not thermostats:
@@ -298,27 +569,22 @@ class Controller(BaseNode):
                         self.poly.delNode(stat_address)
                         time.sleep(1)
 
-            if self.temp_uom == 17:
-                add_node(ThermostatNode_F(self.poly, stat_address, stat_address, name, self))
-            else:
-                add_node(ThermostatNode_C(self.poly, stat_address, stat_address, name, self))
+            stat_node = ThermostatNode(self.poly, stat_address, stat_address, name, self, temp_uom=self.temp_uom)
+            add_node(stat_node)
 
-            time.sleep(0.5)
+            # Wait for PG3 confirmation of parent node before adding children
+            self._wait_for_node_confirmed(stat_address, timeout=10.0)
+
+            # Direct 1-level children under the thermostat primary
             add_node(EnergyLogDayNode(self.poly, stat_address, energy_log_day_address, f"{name} Energy-Day", self))
-            time.sleep(0.5)
             add_node(EnergyLogWeekNode(self.poly, stat_address, energy_log_week_address, f"{name} Energy-Week", self))
-            time.sleep(0.5)
             add_node(EnergyLogYearNode(self.poly, stat_address, energy_log_year_address, f"{name} Energy-Year", self))
-            time.sleep(0.5)
 
         self.disco = 1
 
     def update_profile(self, command=None):
         LOGGER.info('Installing / Updating profile...')
-        if hasattr(self.poly, 'updateProfile'):
-            return self.poly.updateProfile()
-        elif hasattr(self.poly, 'installprofile'):
-            return self.poly.installprofile()
+        self._publish_profile(wait_response=True)
         return True
 
     commands = {

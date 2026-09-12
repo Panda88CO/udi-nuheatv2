@@ -1,9 +1,19 @@
-from .base import LOGGER, BaseNode
-
+import time
 from datetime import date
+
+from .base import LOGGER, BaseNode
 
 
 class EnergyLogYearNode(BaseNode):
+    id = 'ENERGYLOG'
+
+    drivers = [
+        {'driver': 'GV0', 'value': 0, 'uom': 45},
+        {'driver': 'ST', 'value': 0, 'uom': 33},
+        {'driver': 'GV1', 'value': 0, 'uom': 103},
+        {'driver': 'TIME', 'value': 0, 'uom': 151}
+    ]
+
     def __init__(self, polyglot, primary, address, name, controller=None):
         if controller is None and hasattr(polyglot, 'poly'):
             controller = polyglot
@@ -22,27 +32,17 @@ class EnergyLogYearNode(BaseNode):
             return
 
         year_str = str(date.today().year)
-        energy_used = nuheat_client.get_energy_log_year(self.primary, year_str)
         stat_id = getattr(self, 'stat_address', self.primary)
         energy_used = nuheat_client.get_energy_log_year(stat_id, year_str)
         if energy_used is not None:
             self.setDriver('GV0', energy_used[0], uom=45)
             self.setDriver('ST', energy_used[1], uom=33)
             self.setDriver('GV1', energy_used[2], uom=103)
+            self.setDriver('TIME', int(time.time()), uom=151)
         else:
-            LOGGER.error(f"Energy Log Year returned None for {self.primary}")
             LOGGER.error(f"Energy Log Year returned None for {stat_id}")
 
     def query(self, command=None):
         self.reportDrivers()
 
-    drivers = [
-        {'driver': 'GV0', 'value': 0, 'uom': 45},
-        {'driver': 'ST', 'value': 0, 'uom': 33},
-        {'driver': 'GV1', 'value': 0, 'uom': 103}
-    ]
-
-    id = 'ENERGYLOG'
-
     commands = {'QUERY': query}
-
