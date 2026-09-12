@@ -6,6 +6,8 @@ import threading
 
 from nodes.base import LOGGER, BaseNode
 
+VERSION = "2.1.0"
+
 try:
     import udi_interface
     Custom = udi_interface.Custom
@@ -596,10 +598,10 @@ class Controller(BaseNode):
 
 if __name__ == "__main__":
     try:
-        LOGGER.info('Starting NuHeat Polyglot interface...')
+        LOGGER.info(f'Starting NuHeat Polyglot interface v{VERSION}...')
 
         polyglot = udi_interface.Interface([])
-        polyglot.start('2.0.2')
+        polyglot.start(VERSION)
         if hasattr(polyglot, 'setCustomParamsDoc'):
             polyglot.setCustomParamsDoc()
         control = Controller(polyglot, 'controller', 'controller', 'NuHeat')
