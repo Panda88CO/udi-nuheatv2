@@ -185,5 +185,21 @@ class TestNuHeatClient(unittest.TestCase):
         # 150 cents to usd
         self.assertEqual(client.nuheat_cents_to_dollars(150), 1.50)
 
+    @patch('nuheat.nuheat.LOGGER.debug')
+    @patch('requests.get')
+    def test_logger_debug_formatted_json(self, mock_get, mock_debug):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {'result': 'ok'}
+        mock_get.return_value = mock_resp
+
+        client = NuHeat('dummy')
+        client.get_account()
+
+        mock_debug.assert_called_once()
+        log_msg = mock_debug.call_args[0][0]
+        self.assertIn('"result": "ok"', log_msg)
+        self.assertIn("HTTP 200", log_msg)
+
 if __name__ == '__main__':
     unittest.main()

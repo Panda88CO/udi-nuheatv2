@@ -8,7 +8,7 @@ A Polyglot v3 (PG3 / PG3x) NodeServer for integrating **NuHeat Signature** radia
 
 - Universal Devices controller (**eisy** or **Polisy**) running **PG3** or **PG3x**
 - One or more **NuHeat Signature** WiFi floor heating thermostats
-- Active **[My NuHeat](https://mynuheat.com)** portal account
+- Active **[My NuHeat](https://mynuheat.com)** account
 - NuHeat API OAuth credentials (**Client ID** & **Client Secret**)
 
 ---

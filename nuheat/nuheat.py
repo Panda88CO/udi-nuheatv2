@@ -1,5 +1,12 @@
+import json
+import logging
 import sys
 import requests
+
+try:
+    from udi_interface import LOGGER
+except ImportError:
+    LOGGER = logging.getLogger(__name__)
 
 
 class NuHeat:
@@ -23,6 +30,21 @@ class NuHeat:
 
     def set_access_token(self, token):
         self._token_provider = lambda: str(token) if token else ""
+
+    def _log_response(self, method: str, url: str, r: requests.Response):
+        """Log HTTP response details and nicely formatted JSON using LOGGER.debug."""
+        status_code = getattr(r, 'status_code', 'unknown')
+        try:
+            body = r.json()
+            if isinstance(body, (dict, list)):
+                formatted = json.dumps(body, indent=2)
+                LOGGER.debug(f"NuHeat API [{method}] {url} -> HTTP {status_code}:\n{formatted}")
+                return
+        except Exception:
+            pass
+
+        text = getattr(r, 'text', '') or "(empty body)"
+        LOGGER.debug(f"NuHeat API [{method}] {url} -> HTTP {status_code}:\n{text}")
 
     def _normalize_thermostat(self, stat):
         """
@@ -72,15 +94,17 @@ class NuHeat:
         return usd
 
     def get_account(self):
+        url = self.api_v2_url + "/Account"
         try:
-            r = requests.get(self.api_v2_url + "/Account", headers=self.headers)
+            r = requests.get(url, headers=self.headers)
+            self._log_response("GET", url, r)
             if r.status_code == requests.codes.ok:
                 return r.json()
             else:
-                print("get_account Error: " + str(r.status_code) + " - " + str(r.content))
+                LOGGER.error(f"get_account Error: {r.status_code} - {r.content}")
                 return None
         except requests.exceptions.RequestException as e:
-            print("NuHeat.get_account Error: " + str(e))
+            LOGGER.error(f"NuHeat.get_account Error: {e}")
             return None
 
     def get_thermostat(self, serial_number=None):
@@ -90,6 +114,7 @@ class NuHeat:
 
         try:
             r = requests.get(url, headers=self.headers)
+            self._log_response("GET", url, r)
             if r.status_code == requests.codes.ok:
                 resp = r.json()
                 if isinstance(resp, list):
@@ -98,10 +123,10 @@ class NuHeat:
                     return self._normalize_thermostat(resp)
                 return resp
             else:
-                print("get_thermostat Error: " + str(r.status_code) + " - " + str(r.content))
+                LOGGER.error(f"get_thermostat Error: {r.status_code} - {r.content}")
                 return None
         except requests.exceptions.RequestException as e:
-            print("NuHeat.get_thermostat Error: " + str(e))
+            LOGGER.error(f"NuHeat.get_thermostat Error: {e}")
             return None
 
     def set_mode_auto(self, serial_number):
@@ -109,13 +134,14 @@ class NuHeat:
         payload = {'serialNumber': str(serial_number)}
         try:
             r = requests.put(url, headers=self.headers, json=payload)
+            self._log_response("PUT", url, r)
             if r.status_code in (requests.codes.ok, requests.codes.no_content):
                 return True
             else:
-                print("set_mode_auto Error: " + str(r.status_code) + " - " + str(r.content))
+                LOGGER.error(f"set_mode_auto Error: {r.status_code} - {r.content}")
                 return None
         except requests.exceptions.RequestException as e:
-            print("NuHeat.set_mode_auto Error: " + str(e))
+            LOGGER.error(f"NuHeat.set_mode_auto Error: {e}")
             return None
 
     def set_mode_hold(self, serial_number, temperature, hold_until=None, temperature_type=0):
@@ -130,13 +156,14 @@ class NuHeat:
 
         try:
             r = requests.put(url, headers=self.headers, json=payload)
+            self._log_response("PUT", url, r)
             if r.status_code in (requests.codes.ok, requests.codes.no_content):
                 return True
             else:
-                print("set_mode_hold Error: " + str(r.status_code) + " - " + str(r.content))
+                LOGGER.error(f"set_mode_hold Error: {r.status_code} - {r.content}")
                 return None
         except requests.exceptions.RequestException as e:
-            print("NuHeat.set_mode_hold Error: " + str(e))
+            LOGGER.error(f"NuHeat.set_mode_hold Error: {e}")
             return None
 
     def set_mode_manual(self, serial_number, temperature, temperature_type=0):
@@ -149,13 +176,14 @@ class NuHeat:
 
         try:
             r = requests.put(url, headers=self.headers, json=payload)
+            self._log_response("PUT", url, r)
             if r.status_code in (requests.codes.ok, requests.codes.no_content):
                 return True
             else:
-                print("set_mode_manual Error: " + str(r.status_code) + " - " + str(r.content))
+                LOGGER.error(f"set_mode_manual Error: {r.status_code} - {r.content}")
                 return None
         except requests.exceptions.RequestException as e:
-            print("NuHeat.set_mode_manual Error: " + str(e))
+            LOGGER.error(f"NuHeat.set_mode_manual Error: {e}")
             return None
 
     def set_thermostat_setpoint(self, serial_number, setpoint, mode="hold"):
@@ -194,37 +222,40 @@ class NuHeat:
         energy_log_url = self.api_v1_url + "/EnergyLog/Day/" + str(serial_number) + "/" + str(date)
         try:
             r = requests.get(energy_log_url, headers=self.headers)
+            self._log_response("GET", energy_log_url, r)
             if r.status_code == requests.codes.ok:
                 return self._parse_energy_usage(r.json())
             else:
-                print("get_energy_log_day Error: " + str(r.status_code) + " - " + str(r.content))
+                LOGGER.error(f"get_energy_log_day Error: {r.status_code} - {r.content}")
                 return None
         except requests.exceptions.RequestException as e:
-            print("NuHeat.get_energy_log_day Error: " + str(e))
+            LOGGER.error(f"NuHeat.get_energy_log_day Error: {e}")
             return None
 
     def get_energy_log_week(self, serial_number, date):
         energy_log_url = self.api_v1_url + "/EnergyLog/Week/" + str(serial_number) + "/" + str(date)
         try:
             r = requests.get(energy_log_url, headers=self.headers)
+            self._log_response("GET", energy_log_url, r)
             if r.status_code == requests.codes.ok:
                 return self._parse_energy_usage(r.json())
             else:
-                print("get_energy_log_week Error: " + str(r.status_code) + " - " + str(r.content))
+                LOGGER.error(f"get_energy_log_week Error: {r.status_code} - {r.content}")
                 return None
         except requests.exceptions.RequestException as e:
-            print("NuHeat.get_energy_log_week Error: " + str(e))
+            LOGGER.error(f"NuHeat.get_energy_log_week Error: {e}")
             return None
 
     def get_energy_log_year(self, serial_number, date):
         energy_log_url = self.api_v1_url + "/EnergyLog/Month/" + str(serial_number) + "/" + str(date)
         try:
             r = requests.get(energy_log_url, headers=self.headers)
+            self._log_response("GET", energy_log_url, r)
             if r.status_code == requests.codes.ok:
                 return self._parse_energy_usage(r.json())
             else:
-                print("get_energy_log_year Error: " + str(r.status_code) + " - " + str(r.content))
+                LOGGER.error(f"get_energy_log_year Error: {r.status_code} - {r.content}")
                 return None
         except requests.exceptions.RequestException as e:
-            print("NuHeat.get_energy_log_year Error: " + str(e))
+            LOGGER.error(f"NuHeat.get_energy_log_year Error: {e}")
             return None

@@ -56,7 +56,6 @@ class TestPG3Nodes(unittest.TestCase):
 
         params = {
             'tz': 'America/Chicago',
-            'TEMP_UNIT': 'C'
             'temp_unit': 'C'
         }
         controller.customParamsHandler(params)
@@ -276,28 +275,25 @@ class TestPG3Nodes(unittest.TestCase):
         controller.customNsHandler('oauth', {'client_id': 'test_oauth_id', 'client_secret': 'test_oauth_sec'})
         self.assertEqual(controller.client_id, 'test_oauth_id')
         self.assertEqual(controller.client_secret, 'test_oauth_sec')
-        self.assertTrue(controller.portalReady)
+        self.assertTrue(controller.oauthReady)
         self.assertTrue(controller.customNsDone)
         self.assertTrue(controller.customNsHandlerDone)
         controller.oauth.customNsHandler.assert_called_once_with('oauth', {'client_id': 'test_oauth_id', 'client_secret': 'test_oauth_sec'})
 
-    def test_controller_custom_ns_nsdata_credentials(self):
+    def test_controller_custom_ns_oauth_tokens(self):
         controller = Controller(self.mock_poly, 'controller', 'controller', 'NuHeat')
-        controller.oauth.updateOauthSettings = MagicMock()
-        controller.customNsHandler('nsdata', {'portalID': 'test_portal_id', 'PortalSecret': 'test_portal_secret'})
-        self.assertEqual(controller.portalID, 'test_portal_id')
-        self.assertEqual(controller.portalSecret, 'test_portal_secret')
-        self.assertEqual(controller.client_id, 'test_portal_id')
-        self.assertEqual(controller.client_secret, 'test_portal_secret')
-        self.assertTrue(controller.portalReady)
+        controller.oauth.customNsHandler = MagicMock()
+        controller.customNsHandler('oauthTokens', {'access_token': 'test_tok'})
         self.assertTrue(controller.customNsDone)
+        self.assertTrue(controller.customNsHandlerDone)
+        controller.oauth.customNsHandler.assert_called_once_with('oauthTokens', {'access_token': 'test_tok'})
 
     def test_controller_start_synchronization(self):
         controller = Controller(self.mock_poly, 'controller', 'controller', 'NuHeat')
         controller.customParam_done = True
         controller.customNsDone = True
         controller.config_done = True
-        controller.portalReady = True
+        controller.oauthReady = True
         controller.get_access_token = MagicMock(return_value='test_valid_token')
         controller.discover = MagicMock()
         controller._publish_profile = MagicMock()
