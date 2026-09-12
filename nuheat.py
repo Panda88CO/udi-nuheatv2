@@ -390,23 +390,13 @@ class Controller(BaseNode):
                 self.portalData.load(data)
 
             if key == 'nsdata':
-                if 'portalID' in data:
-                    self.portalID = data['portalID']
-                    self.client_id = data['portalID']
-                elif 'client_id' in data:
+                if 'client_id' in data:
                     self.client_id = data['client_id']
                     self.portalID = data['client_id']
                 elif 'clientId' in data:
                     self.client_id = data['clientId']
                     self.portalID = data['clientId']
-
-                if 'PortalSecret' in data:
-                    self.portalSecret = data['PortalSecret']
-                    self.client_secret = data['PortalSecret']
-                elif 'portalSecret' in data:
-                    self.portalSecret = data['portalSecret']
-                    self.client_secret = data['portalSecret']
-                elif 'client_secret' in data:
+                if   'client_secret' in data:
                     self.client_secret = data['client_secret']
                     self.portalSecret = data['client_secret']
                 elif 'clientSecret' in data:

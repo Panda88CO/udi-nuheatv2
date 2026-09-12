@@ -19,21 +19,6 @@ A Polyglot v3 (PG3 / PG3x) NodeServer for integrating **NuHeat Signature** radia
 2. Go to the **NodeServer Store**.
 3. Locate **NuHeat** and click **Install** (or install from your GitHub repository URL).
 
----
-
-## OAuth Client Settings
-
-When requesting or configuring your OAuth application with NuHeat, use the following settings:
-
-| Setting | Value |
-| :--- | :--- |
-| **Grant Type** | `Authorization Code` (`authorization_code`) & `Refresh Token` (`offline_access`) |
-| **Return URI (Redirect URI)** | `https://my.isy.io/api/cloudlink/redirect` |
-| **Authorization Endpoint** | `https://identity.mynuheat.com/connect/authorize` |
-| **Token Endpoint** | `https://identity.mynuheat.com/connect/token` |
-| **Scopes** | `openapi openid profile offline_access` |
-
----
 
 ## Configuration
 
@@ -53,11 +38,9 @@ In the PG3 dashboard under the NodeServer's **Configuration** tab, add the follo
 
 ## First-Time Setup & Authentication
 
-1. **Enter Credentials**: Save your `clientId`, `clientSecret`, and `tz` in the Custom Configuration Parameters.
-1. **Enter Credentials**: Save your `tz` in the Custom Configuration Parameters.
-2. **Authenticate**: Click the **Authenticate** button on the NodeServer details page in the PG3 dashboard.
-3. **Log In**: A browser window will open to the NuHeat login page. Sign into your My NuHeat account and grant access.
-4. **Discovery**: Once authentication completes, the NodeServer will automatically discover your connected thermostats and create all device nodes in your Admin Console. You can also trigger discovery manually by clicking **Discover** on the Controller node.
+1. **Authenticate**: Click the **Authenticate** button on the NodeServer details page in the PG3 dashboard.
+2. **Log In**: A browser window will open to the NuHeat login page. Sign into your My NuHeat account and grant access.
+3. **Discovery**: Once authentication completes, the NodeServer will automatically discover your connected thermostats and create all device nodes in your Admin Console. You can also trigger discovery manually by clicking **Discover** on the Controller node.
 
 ---
 
