@@ -172,6 +172,34 @@ class TestNuHeatClient(unittest.TestCase):
             headers=client.headers
         )
 
+    @patch('requests.get')
+    def test_get_energy_log_month_and_year(self, mock_get):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            'energyUsageType': 'Month',
+            'mondayIsFirstDay': False,
+            'energyUsage': [
+                {'entry': '8', 'minutes': 30, 'energyKWattHour': 0.25, 'chargeKWattHour': 5.0},
+                {'entry': '9', 'minutes': 60, 'energyKWattHour': 1.50, 'chargeKWattHour': 20.0}
+            ]
+        }
+        mock_get.return_value = mock_resp
+
+        client = NuHeat('dummy')
+        month_res = client.get_energy_log_month('12345678', '2026', 9)
+        self.assertEqual(month_res, [60, 1.50, 0.20])
+
+        # Test year sums all entries
+        year_res = client.get_energy_log_year('12345678', '2026')
+        self.assertEqual(year_res, [90, 1.75, 0.25])
+
+        # Verify caching: mock_get was only called once for both month and year queries
+        mock_get.assert_called_once_with(
+            'https://api.mynuheat.com/api/v1/EnergyLog/Month/12345678/2026',
+            headers=client.headers
+        )
+
     def test_temperature_conversions(self):
         client = NuHeat('dummy')
         # 2000 hundredths C = 20.0 C -> 68.0 F

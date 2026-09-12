@@ -1,6 +1,7 @@
 import json
 import logging
 import sys
+import time
 import requests
 
 try:
@@ -14,6 +15,7 @@ class NuHeat:
         self.api_v2_url = "https://api.mynuheat.com/api/v2"
         self.api_v1_url = "https://api.mynuheat.com/api/v1"
         self.api_url = self.api_v2_url
+        self._month_cache = {}
 
         if callable(token_or_provider):
             self._token_provider = token_or_provider
@@ -82,7 +84,7 @@ class NuHeat:
         return json_celsius
 
     def nuheat_celsius_to_json(self, celsius):
-        json_celsius = int(celsius) * 100
+        json_celsius = round(float(celsius) * 100)
         return json_celsius
 
     def nuheat_celsius_to_normal(self, json_celsius):
@@ -246,16 +248,52 @@ class NuHeat:
             LOGGER.error(f"NuHeat.get_energy_log_week Error: {e}")
             return None
 
-    def get_energy_log_year(self, serial_number, date):
-        energy_log_url = self.api_v1_url + "/EnergyLog/Month/" + str(serial_number) + "/" + str(date)
+    def _fetch_energy_log_month(self, serial_number, year):
+        cache_key = (str(serial_number), str(year))
+        now = time.time()
+        if hasattr(self, '_month_cache') and cache_key in self._month_cache:
+            cached_time, cached_json = self._month_cache[cache_key]
+            if now - cached_time < 300:
+                return cached_json
+
+        energy_log_url = self.api_v1_url + "/EnergyLog/Month/" + str(serial_number) + "/" + str(year)
         try:
             r = requests.get(energy_log_url, headers=self.headers)
             self._log_response("GET", energy_log_url, r)
             if r.status_code == requests.codes.ok:
-                return self._parse_energy_usage(r.json())
+                data = r.json()
+                if not hasattr(self, '_month_cache'):
+                    self._month_cache = {}
+                self._month_cache[cache_key] = (now, data)
+                return data
             else:
-                LOGGER.error(f"get_energy_log_year Error: {r.status_code} - {r.content}")
+                LOGGER.error(f"EnergyLog Month Error: {r.status_code} - {r.content}")
                 return None
         except requests.exceptions.RequestException as e:
-            LOGGER.error(f"NuHeat.get_energy_log_year Error: {e}")
+            LOGGER.error(f"NuHeat EnergyLog Month Error: {e}")
             return None
+
+    def get_energy_log_month(self, serial_number, year, month):
+        resp = self._fetch_energy_log_month(serial_number, year)
+        if not resp or 'energyUsage' not in resp:
+            return None
+
+        target_entry = str(month)
+        for entry in resp['energyUsage']:
+            if str(entry.get('entry')) == target_entry:
+                minutes = entry.get('minutes', 0)
+                raw_kwh = entry.get('energyKWattHour', 0)
+                raw_charge = entry.get('chargeKWattHour', 0)
+                energy_kw_hour = round(raw_kwh, 2)
+                cents_charge = round(raw_charge, 2)
+                usd_charge = self.nuheat_cents_to_dollars(cents_charge)
+                return [minutes, energy_kw_hour, usd_charge]
+
+        return [0, 0.0, 0.0]
+
+    def get_energy_log_year(self, serial_number, year):
+        resp = self._fetch_energy_log_month(serial_number, year)
+        if resp is not None:
+            return self._parse_energy_usage(resp)
+        return None
+

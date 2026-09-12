@@ -6,7 +6,7 @@ import threading
 
 from nodes.base import LOGGER, BaseNode
 
-VERSION = "2.1.1"
+VERSION = "2.1.2"
 
 try:
     import udi_interface
@@ -65,12 +65,12 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
     if temp_unit == "C":
         clitemp_ranges = [
             {"uom": "4", "min": 5, "max": 40, "step": 1, "prec": 0},
-            {"uom": "17", "min": 41, "max": 104, "step": 1, "prec": 0},
+            {"uom": "25", "subset": "-1, -2", "names": {"-1": "Invalid", "-2": "Permanent Hold"}},
         ]
     else:
         clitemp_ranges = [
             {"uom": "17", "min": 41, "max": 104, "step": 1, "prec": 0},
-            {"uom": "4", "min": 5, "max": 40, "step": 1, "prec": 0},
+            {"uom": "25", "subset": "-1, -2", "names": {"-1": "Invalid", "-2": "Permanent Hold"}},
         ]
 
     editors = [
@@ -87,9 +87,17 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
             ],
         },
         {
-            "id": "CLIMD",
+            "id": "MODE_SEL",
             "ranges": [
-                {"uom": "67", "subset": "1,3", "names": {"1": "Heat / Manual", "3": "Auto / Schedule"}}
+                {
+                    "uom": "25",
+                    "subset": "1,2,3",
+                    "names": {
+                        "1": "Auto",
+                        "2": "Hold",
+                        "3": "Permanent Hold",
+                    },
+                }
             ],
         },
         {
@@ -97,15 +105,23 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
             "ranges": clitemp_ranges,
         },
         {
-            "id": "TPW",
+            "id": "HOLD_TIME",
             "ranges": [
-                {"uom": "33", "min": 0, "max": 10000, "prec": 2}
+                {"uom": "45", "min": 0, "max": 1440, "step": 1, "prec": 0},
+                {
+                    "uom": "25",
+                    "subset": "-2,-1",
+                    "names": {
+                        "-1": "Invalid",
+                        "-2": "Permanent Hold",
+                    },
+                },
             ],
         },
         {
-            "id": "GV0",
+            "id": "TPW",
             "ranges": [
-                {"uom": "45", "min": 0, "max": 43830, "prec": 0}
+                {"uom": "33", "min": 0, "max": 100000, "prec": 2}
             ],
         },
         {
@@ -127,11 +143,12 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
             ],
             "cmds": {
                 "accepts": [
-                    {"id": "QUERY", "name": "Query"},
-                    {"id": "DISCOVER", "name": "Discover"},
-                    {"id": "UPDATE_PROFILE", "name": "Update Profile"},
+                    {"id": "UPDATE", "name": "Update"},
                 ],
-                "sends": [],
+                "sends": [
+                    {"id": "DON"},
+                    {"id": "DOF"},
+                ],
             },
             "links": {"ctl": [], "rsp": []},
         },
@@ -142,37 +159,28 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
             "properties": [
                 {"id": "ST", "name": "Current Temperature", "editor": "CLITEMP"},
                 {"id": "CLISPH", "name": "Heat Setpoint", "editor": "CLITEMP"},
-                {"id": "CLIMD", "name": "Thermostat Mode", "editor": "CLIMD"},
+                {"id": "CLIMD", "name": "Mode", "editor": "MODE_SEL"},
                 {"id": "CLIHCS", "name": "Heat State", "editor": "CLIHCS"},
+                {"id": "GV0", "name": "Daily Energy", "editor": "TPW"},
+                {"id": "GV1", "name": "Last 7 Days Energy", "editor": "TPW"},
+                {"id": "GV2", "name": "Monthly Energy", "editor": "TPW"},
+                {"id": "GV3", "name": "Yearly Energy", "editor": "TPW"},
+                {"id": "GV4", "name": "Hold Minutes", "editor": "HOLD_TIME"},
+                {"id": "GV5", "name": "Online", "editor": "bool"},
                 {"id": "TIME", "name": "Last Update", "editor": "timestamp"},
             ],
             "cmds": {
                 "accepts": [
                     {"id": "QUERY", "name": "Query"},
                     {
-                        "id": "CLISPH",
-                        "name": "Heat Setpoint",
-                        "params": [
-                            {"id": "", "name": "Temperature", "editor": "CLITEMP", "init": "CLISPH"}
+                        "id": "SET_MODE",
+                        "name": "Set Mode",
+                        "parameters": [
+                            {"id": "mode", "name": "Mode", "editor": "MODE_SEL", "init": "CLIMD"},
+                            {"id": "temp", "name": "Temperature", "editor": "CLITEMP", "init": "CLISPH"},
+                            {"id": "hold", "name": "Hold Minutes", "editor": "HOLD_TIME", "init": "GV4"},
                         ],
                     },
-                ],
-                "sends": [],
-            },
-            "links": {"ctl": [], "rsp": []},
-        },
-        {
-            "id": "ENERGYLOG",
-            "name": "Energy Log Node",
-            "icon": "EnergyMonitor",
-            "properties": [
-                {"id": "ST", "name": "Energy Used", "editor": "TPW"},
-                {"id": "GV0", "name": "Energy Minutes", "editor": "GV0"},
-                {"id": "TIME", "name": "Last Update", "editor": "timestamp"},
-            ],
-            "cmds": {
-                "accepts": [
-                    {"id": "QUERY", "name": "Query"},
                 ],
                 "sends": [],
             },
@@ -207,6 +215,7 @@ class Controller(BaseNode):
         self.client_id = None
         self.client_secret = None
         self.oauthReady = False
+        self.hb_state = 0
 
         # Confirmation tracking
         self._confirmed_node_addresses = set()
@@ -527,7 +536,19 @@ class Controller(BaseNode):
         elif 'longPoll' in polltype:
             self.longPoll()
 
+    def heartbeat(self):
+        """Toggle DON / DOF command to indicate node server heartbeat."""
+        if self.hb_state == 0:
+            self.hb_state = 1
+            if hasattr(self, 'reportCmd'):
+                self.reportCmd('DON')
+        else:
+            self.hb_state = 0
+            if hasattr(self, 'reportCmd'):
+                self.reportCmd('DOF')
+
     def shortPoll(self):
+        self.heartbeat()
         if self.disco == 1:
             get_nodes = getattr(self.poly, 'getNodes', None)
             nodes = get_nodes() if callable(get_nodes) else getattr(self, 'nodes', {})
@@ -542,8 +563,11 @@ class Controller(BaseNode):
             nodes = get_nodes() if callable(get_nodes) else getattr(self, 'nodes', {})
             nodes_iterable = nodes.values() if isinstance(nodes, dict) else nodes
             for node in nodes_iterable:
-                if getattr(node, 'address', None) != self.address and hasattr(node, 'update_info'):
-                    node.update_info()
+                if getattr(node, 'address', None) != self.address:
+                    if hasattr(node, 'update_info'):
+                        node.update_info()
+                    if hasattr(node, 'update_energy'):
+                        node.update_energy()
 
     def query(self, command=None):
         self.setDriver('TIME', int(time.time()), uom=151)
@@ -576,6 +600,7 @@ class Controller(BaseNode):
                     self.temp_uom = 4
                 else:
                     self.temp_unit = "F"
+                    self.teThemp_uom = 17
                     self.temp_uom = 17
             else:
                 self.temp_unit = "F"
@@ -628,15 +653,29 @@ class Controller(BaseNode):
             stat_node = ThermostatNode(self.poly, stat_address, stat_address, name, self, temp_uom=self.temp_uom)
             add_node(stat_node)
 
-            # Wait for PG3 confirmation of parent node before adding children
-            self._wait_for_node_confirmed(stat_address, timeout=10.0)
+            # Clean up any legacy energy child nodes from previous versions
+            for child_addr in (energy_log_day_address, energy_log_week_address, energy_log_year_address):
+                legacy_child = None
+                if hasattr(self.poly, '_nodes') and isinstance(self.poly._nodes, dict):
+                    legacy_child = self.poly._nodes.get(child_addr)
+                if legacy_child is None and hasattr(self.poly, 'getNode'):
+                    legacy_child = self.poly.getNode(child_addr)
+                elif legacy_child is None and hasattr(self, 'nodes') and isinstance(self.nodes, dict):
+                    legacy_child = self.nodes.get(child_addr)
 
-            # Direct 1-level children under the thermostat primary
-            add_node(EnergyLogDayNode(self.poly, stat_address, energy_log_day_address, f"{name} Energy-Day", self))
-            add_node(EnergyLogWeekNode(self.poly, stat_address, energy_log_week_address, f"{name} Energy-Week", self))
-            add_node(EnergyLogYearNode(self.poly, stat_address, energy_log_year_address, f"{name} Energy-Year", self))
+                if legacy_child is not None:
+                    LOGGER.info(f"Removing legacy child node {child_addr} from PG3...")
+                    if hasattr(self.poly, 'delNode'):
+                        self.poly.delNode(child_addr)
 
         self.disco = 1
+
+    def update_nodes(self, command=None):
+        """Forces an immediate update across all nodes (executes longPoll)."""
+        LOGGER.info('Forcing update across all nodes...')
+        self.setDriver('TIME', int(time.time()), uom=151)
+        self.longPoll()
+        return True
 
     def update_profile(self, command=None):
         LOGGER.info('Installing / Updating profile...')
@@ -644,9 +683,8 @@ class Controller(BaseNode):
         return True
 
     commands = {
-        'QUERY': query,
-        'DISCOVER': discover,
-        'UPDATE_PROFILE': update_profile
+        'UPDATE': update_nodes,
+
     }
 
 

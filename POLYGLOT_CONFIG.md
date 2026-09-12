@@ -30,21 +30,42 @@ In your PG3/PG3x NodeServer dashboard, configure the following keys under **Conf
 
 ---
 
-## 3. Thermostat Operating Mode Recommendation
-
-For the NodeServer to have full control over thermostat target temperatures:
-1. On the physical thermostat screen, go to **Setup** → **Preferences**.
-2. Tap **Operating Mode**.
-3. Change it from **Auto** (schedule-based) to **Manual**.
-4. *Note: Setting to Manual will disable internal schedules so the ISY/eisy can control setpoints directly.*
+## 3. Operating Mode & Setpoint Control
+ 
+The thermostat uses a single consolidated command, **`SET_MODE`**, with up to 3 parameters:
+- **Mode (`mode`)**:
+  - `1` = **Auto**: Follows internal schedule. Temperature and hold minutes are ignored. Setpoint (`CLISPH`) and Hold Minutes (`GV4`) display as `Invalid`.
+  - `2` = **Hold**: Temporary hold using target `temp` and `hold` duration in minutes. Counts down remaining minutes on `GV4`.
+  - `3` = **Permanent Hold**: Manual hold using target `temp` indefinitely. Hold minutes is ignored and `GV4` displays as `Permanent Hold`.
+- **Temperature (`temp`)**: Target setpoint in °F or °C (ignored in Auto).
+- **Hold Minutes (`hold`)**: Duration in minutes 0–1440 (ignored in Auto and Permanent Hold).
 
 ---
 
 ## 4. Discovered Nodes
 
-For each thermostat discovered on your account, the following nodes are created:
-1. **Thermostat Node** (`°F` or `°C` selected based on your `temp_unit` configuration or NuHeat account preferences).
-2. **Energy Log - Day** (Daily energy usage in watt-hours).
-3. **Energy Log - Week** (Weekly energy usage in watt-hours).
-4. **Energy Log - Year** (Yearly energy usage in watt-hours).
+For each thermostat discovered on your account, a single unified primary node is created:
+1. **Controller Node**:
+   - **Status Drivers**:
+     - NodeServer Online (`ST` — Online / Offline, UOM 2)
+     - Last Update (`TIME` — timestamp, UOM 151)
+   - **Heartbeat**: Toggles `DON` / `DOF` on each short poll.
+   - **Commands**:
+     - **Update (`UPDATE`)**: Immediately force updates all nodes and energy logs.
 
+2. **Thermostat Node** (`°F` or `°C` selected based on your `temp_unit` configuration or NuHeat account preferences).
+   - **Status Drivers**:
+     - Current Temperature (`ST`)
+     - Heat Setpoint (`CLISPH` — displays `Invalid` [-1] in Auto mode)
+     - Operating Mode (`CLIMD` — Auto, Hold, Permanent Hold)
+     - Heat State (`CLIHCS` — Idle, Heating)
+     - Hold Minutes (`GV4` — displays remaining minutes on Hold; displays `Permanent Hold` [-2] in Permanent Hold, and `Invalid` [-1] in Auto mode)
+     - Online Status (`GV5` — Online / Offline, UOM 2)
+     - Last Update (`TIME` — timestamp, UOM 151)
+     - Daily Energy (`GV0` — kWh, UOM 33)
+     - Last 7 Days Energy (`GV1` — kWh, UOM 33)
+     - Monthly Energy (`GV2` — kWh, UOM 33)
+     - Yearly Energy (`GV3` — kWh, UOM 33)
+   - **Commands**:
+     - **Set Mode (`SET_MODE`)**: Interactive GUI command with inputs for Mode (Auto, Hold, Permanent Hold), Temperature, and Hold Minutes.
+     - **Query (`QUERY`)**: Query thermostat status.

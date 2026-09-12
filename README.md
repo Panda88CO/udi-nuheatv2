@@ -40,39 +40,55 @@ In the PG3 dashboard under the NodeServer's **Configuration** tab, add the follo
 
 1. **Authenticate**: Click the **Authenticate** button on the NodeServer details page in the PG3 dashboard.
 2. **Log In**: A browser window will open to the NuHeat login page. Sign into your My NuHeat account and grant access.
-3. **Discovery**: Once authentication completes, the NodeServer will automatically discover your connected thermostats and create all device nodes in your Admin Console. You can also trigger discovery manually by clicking **Discover** on the Controller node.
+3. **Discovery**: Once authentication completes, the NodeServer automatically discovers your connected thermostats and creates all device nodes in your Admin Console.
 
 ---
 
-## Thermostat Operating Mode
+## Setting Operating Mode & Setpoint
 
-For the NodeServer to have full setpoint control without conflicting with built-in schedules:
-1. On the physical thermostat screen, tap **Setup** → **Preferences**.
-2. Tap **Operating Mode** at the bottom of the screen.
-3. Change the selection from **Auto** to **Manual**.
-4. *(Note: Manual mode disables internal cloud/app schedules so that your ISY/eisy programs have exclusive control).*
+The thermostat uses a single consolidated command, **`SET_MODE`**, which accepts up to 3 parameters:
+- **Mode (`mode`)**:
+  - `1` = **Auto** (Follow internal schedule): Temperature and hold duration are ignored. Setpoint (`CLISPH`) and Hold Minutes (`GV4`) display as `Invalid` in the Admin Console.
+  - `2` = **Hold** (Temporary Hold): Sets target temperature (`temp`) and temporary hold duration in minutes (`hold`). The NodeServer automatically calculates the expiration timestamp and counts down remaining minutes on `GV4`.
+  - `3` = **Permanent Hold** (Manual): Sets target temperature (`temp`) permanently until changed. Hold duration is ignored and `GV4` displays as `Permanent Hold`.
+- **Temperature (`temp`)**: Target heating setpoint in configured scale (°F or °C). Ignored in Auto mode.
+- **Hold Minutes (`hold`)**: Duration in minutes (0–1440) for temporary hold. Ignored in Auto and Permanent Hold modes.
 
 ---
 
 ## Features & Discovered Nodes
 
-The NodeServer automatically detects your account's preferred temperature scale (°F or °C) and creates the following nodes for each thermostat:
+The NodeServer automatically detects your account's preferred temperature scale (°F or °C) and creates the following nodes:
 
-- **Controller Node**: Manages connection, authentication status, and discovery.
+- **Controller Node**:
+  - **Drivers**:
+    - **NodeServer Online (`ST`)**: Indicates whether the NodeServer process is running and connected (Online / Offline, UOM 2).
+    - **Last Update (`TIME`)**: Unix epoch timestamp (UOM 151) of the last successful communication/poll with the controller.
+  - **Heartbeat (`DON` / `DOF`)**: Emits alternating `DON` and `DOF` control events on each short poll for ISY watchdog / heartbeat monitoring programs.
+  - **Commands**:
+    - **Update (`UPDATE`)**: Immediately forces an update across all nodes and queries fresh energy metrics (executes long poll).
+
 - **Thermostat Node (`°F` or `°C`)**:
-  - Reports current floor temperature and target setpoint.
-  - Reports heating status (idle / heating).
-  - Set target heating temperature directly from programs and Admin Console.
-- **Energy Log Nodes**:
-  - **Energy Log - Day**: Daily power consumption (watt-hours).
-  - **Energy Log - Week**: Weekly power consumption (watt-hours).
-  - **Energy Log - Year**: Yearly power consumption (watt-hours).
+  - **Temperature & Setpoint**: Reports current temperature (`ST`) and target setpoint (`CLISPH` — displays `Invalid` [-1, UOM 25] in Auto mode).
+  - **Operating Mode (`CLIMD`)**: Auto, Hold, or Permanent Hold.
+  - **Heat State (`CLIHCS`)**: Idle or Heating.
+  - **Hold Minutes (`GV4`)**: Displays remaining hold duration in minutes when on Hold; displays `Permanent Hold` (-2, UOM 25) in Permanent Hold, and `Invalid` (-1, UOM 25) in Auto mode.
+  - **Online Status (`GV5`)**: Thermostat connection status (Online / Offline, UOM 2).
+  - **Last Update (`TIME`)**: Unix epoch timestamp (UOM 151) of the last data refresh for this thermostat.
+  - **Commands**:
+    - **Set Mode (`SET_MODE`)**: Interactive GUI command with inputs for Mode (Auto, Hold, Permanent Hold), Temperature, and Hold Minutes.
+    - **Query (`QUERY`)**: Queries current state from the NuHeat cloud.
+  - **Energy Metrics (UOM 33 / kWh)**:
+    - **Daily Energy** (`GV0`): Energy used today in kWh.
+    - **Last 7 Days Energy** (`GV1`): Energy used over the past 7 days in kWh.
+    - **Monthly Energy** (`GV2`): Month-to-date energy usage in kWh.
+    - **Yearly Energy** (`GV3`): Year-to-date energy usage in kWh.
 
 ---
 
 ## Polling
 
-- **Short Poll (default 300s)**: Queries thermostat status, temperature, and heating activity.
+- **Short Poll (default 300s)**: Queries thermostat status, temperature, mode, and heating activity.
 - **Long Poll (default 1800s)**: Updates energy usage metrics.
 
 ---
@@ -80,4 +96,3 @@ The NodeServer automatically detects your account's preferred temperature scale 
 ## Limitations
 
 - Internal thermostat scheduling is not edited through the NodeServer (use ISY programs instead).
-- Mode changes (e.g. Away mode) are currently managed via the NuHeat app or physical thermostat.
