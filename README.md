@@ -73,7 +73,7 @@ The NodeServer automatically detects your account's preferred temperature scale 
 ## Polling
 
 - **Short Poll (default 300s)**: Queries thermostat status, temperature, and heating activity.
-- **Long Poll (default 900s)**: Updates energy usage metrics.
+- **Long Poll (default 1800s)**: Updates energy usage metrics.
 
 ---
 
