@@ -475,6 +475,29 @@ class Controller(BaseNode):
         except Exception as e:
             LOGGER.error(f"Error in oauthHandler: {e}")
 
+    def get_configured_temp_unit(self):
+        """Returns 'C', 'F', or None if not configured in customParams."""
+        for key in ('temp_unit', 'temp_unt', 'TEMP_UNIT', 'TEMP_UNT'):
+            if key in self.customParams:
+                val = self.customParams[key]
+                if val:
+                    raw = str(val).strip().upper()
+                    if raw.startswith('C'):
+                        return 'C'
+                    elif raw.startswith('F'):
+                        return 'F'
+
+        rawdata = getattr(self.customParams, '_rawdata', None)
+        if isinstance(rawdata, dict):
+            for key, val in rawdata.items():
+                if key.lower() in ('temp_unit', 'temp_unt'):
+                    raw = str(val).strip().upper()
+                    if raw.startswith('C'):
+                        return 'C'
+                    elif raw.startswith('F'):
+                        return 'F'
+        return None
+
     def customParamsHandler(self, data):
         LOGGER.debug(f"customParamsHandler called with {len(data) if hasattr(data, '__len__') else 'unknown'} params")
         self.customParams.load(data)
@@ -485,21 +508,30 @@ class Controller(BaseNode):
             self.customParams['tz'] = self.tz
 
         prev_temp_unit = self.temp_unit
-        raw_unit = str(self.customParams.get('TEMP_UNIT') or '').strip().upper()
-        if raw_unit in ('C', 'CELSIUS'):
-            self.temp_unit = 'C'
-            self.temp_uom = 4
-        elif raw_unit in ('F', 'FAHRENHEIT'):
+        configured_unit = self.get_configured_temp_unit()
+        if configured_unit:
+            self.temp_unit = configured_unit
+            self.temp_uom = 4 if configured_unit == 'C' else 17
+        else:
+            # Pre-populate temp_unit so it displays in PG3 Custom Configuration Parameters
+            self.customParams['temp_unit'] = 'F'
             self.temp_unit = 'F'
             self.temp_uom = 17
 
         if self.temp_unit != prev_temp_unit:
             self._publish_profile()
+            get_nodes = getattr(self.poly, 'getNodes', None)
+            nodes = get_nodes() if callable(get_nodes) else getattr(self, 'nodes', {})
+            nodes_iterable = nodes.values() if isinstance(nodes, dict) else nodes
+            for node in nodes_iterable:
+                if hasattr(node, 'temp_uom'):
+                    node.temp_uom = self.temp_uom
+                    if hasattr(node, 'update_info'):
+                        node.update_info()
 
-        self.update_oauth_config()
         self.handleCustomParamsDone = True
         self.customParam_done = True
-        LOGGER.debug("customParamsHandler finished")
+        LOGGER.debug(f"customParamsHandler finished: tz={self.tz}, temp_unit={self.temp_unit} (uom {self.temp_uom})")
 
     def start(self):
         LOGGER.info('Starting NuHeat NodeServer...')
@@ -576,8 +608,8 @@ class Controller(BaseNode):
         if hasattr(self.Notices, 'delete'):
             self.Notices.delete('auth')
 
-        raw_unit = str(self.customParams.get('TEMP_UNIT') or '').strip().upper()
-        if not raw_unit:
+        configured_unit = self.get_configured_temp_unit()
+        if not configured_unit:
             account_info = self.NuHeat.get_account()
             if account_info:
                 self.temperature_scale = account_info.get('temperatureScale', 'Fahrenheit')

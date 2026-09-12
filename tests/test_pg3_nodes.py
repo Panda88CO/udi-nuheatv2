@@ -49,15 +49,43 @@ class TestPG3Nodes(unittest.TestCase):
         controller.oauth.updateOauthSettings = MagicMock()
         controller._publish_profile = MagicMock()
 
+        # Create mock thermostat node on controller
+        mock_stat = MagicMock()
+        mock_stat.temp_uom = 17
+        self.mock_poly.getNodes.return_value = {'stat_1': mock_stat}
+
         params = {
             'tz': 'America/Chicago',
             'TEMP_UNIT': 'C'
+            'temp_unit': 'C'
         }
         controller.customParamsHandler(params)
         self.assertEqual(controller.tz, 'America/Chicago')
         self.assertEqual(controller.temp_unit, 'C')
         self.assertEqual(controller.temp_uom, 4)
+        self.assertEqual(mock_stat.temp_uom, 4)
+        mock_stat.update_info.assert_called_once()
         controller._publish_profile.assert_called_once()
+
+    def test_controller_custom_params_handler_with_temp_unt(self):
+        controller = Controller(self.mock_poly, 'controller', 'controller', 'NuHeat')
+        controller._publish_profile = MagicMock()
+
+        params = {
+            'tz': 'America/Denver',
+            'temp_unt': 'C'
+        }
+        controller.customParamsHandler(params)
+        self.assertEqual(controller.temp_unit, 'C')
+        self.assertEqual(controller.temp_uom, 4)
+
+        params_f = {
+            'tz': 'America/Denver',
+            'temp_unt': 'F'
+        }
+        controller.customParamsHandler(params_f)
+        self.assertEqual(controller.temp_unit, 'F')
+        self.assertEqual(controller.temp_uom, 17)
 
     def test_controller_discover(self):
         controller = Controller(self.mock_poly, 'controller', 'controller', 'NuHeat')
