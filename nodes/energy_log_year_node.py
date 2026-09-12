@@ -10,7 +10,6 @@ class EnergyLogYearNode(BaseNode):
     drivers = [
         {'driver': 'GV0', 'value': 0, 'uom': 45},
         {'driver': 'ST', 'value': 0, 'uom': 33},
-        {'driver': 'GV1', 'value': 0, 'uom': 103},
         {'driver': 'TIME', 'value': 0, 'uom': 151}
     ]
 
@@ -37,7 +36,6 @@ class EnergyLogYearNode(BaseNode):
         if energy_used is not None:
             self.setDriver('GV0', energy_used[0], uom=45)
             self.setDriver('ST', energy_used[1], uom=33)
-            self.setDriver('GV1', energy_used[2], uom=103)
             self.setDriver('TIME', int(time.time()), uom=151)
         else:
             LOGGER.error(f"Energy Log Year returned None for {stat_id}")

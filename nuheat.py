@@ -109,12 +109,6 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
             ],
         },
         {
-            "id": "GV1",
-            "ranges": [
-                {"uom": "103", "min": 0, "max": 10000, "prec": 2}
-            ],
-        },
-        {
             "id": "timestamp",
             "ranges": [
                 {"uom": "151", "min": 0, "max": 4294967295, "prec": 0}
@@ -174,7 +168,6 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
             "properties": [
                 {"id": "ST", "name": "Energy Used", "editor": "TPW"},
                 {"id": "GV0", "name": "Energy Minutes", "editor": "GV0"},
-                {"id": "GV1", "name": "Energy Cost", "editor": "GV1"},
                 {"id": "TIME", "name": "Last Update", "editor": "timestamp"},
             ],
             "cmds": {
@@ -202,6 +195,7 @@ class Controller(BaseNode):
         self.poly = polyglot
         self.name = name
         self.customParams = Custom(polyglot, 'customparams')
+        self.portalData = Custom(polyglot, 'customNSdata')
         self.Notices = getattr(polyglot, 'Notices', {})
         self.oauth = OAuth(polyglot)
         self.NuHeat = NuHeat(token_or_provider=self.get_access_token)
@@ -211,13 +205,22 @@ class Controller(BaseNode):
         self.tz = "America/New_York"
         self.disco = 0
 
+        self.client_id = None
+        self.client_secret = None
+        self.portalID = None
+        self.portalSecret = None
+        self.portalReady = False
+
         # Confirmation tracking
         self._confirmed_node_addresses = set()
         self._deleted_node_addresses = set()
 
         # Thread synchronization flags
+        self.customParam_done = False
         self.handleCustomParamsDone = False
+        self.customNsDone = False
         self.customNsHandlerDone = False
+        self.config_done = False
         self.configDone = False
         self.oauth_lock = threading.Lock()
 
@@ -349,9 +352,12 @@ class Controller(BaseNode):
 
     def update_oauth_config(self):
         with self.oauth_lock:
-            client_id = self.customParams.get('clientId') or self.customParams.get('client_id')
-            client_secret = self.customParams.get('clientSecret') or self.customParams.get('client_secret')
+            client_id = self.client_id or self.portalID or self.customParams.get('clientId') or self.customParams.get('client_id')
+            client_secret = self.client_secret or self.portalSecret or self.customParams.get('clientSecret') or self.customParams.get('client_secret')
             if client_id and client_secret:
+                self.client_id = client_id
+                self.client_secret = client_secret
+                self.portalReady = True
                 oauth_cfg = {
                     'name': 'Nuheat',
                     'client_id': client_id,
@@ -364,7 +370,7 @@ class Controller(BaseNode):
                 }
                 if hasattr(self.oauth, 'updateOauthSettings'):
                     self.oauth.updateOauthSettings(oauth_cfg)
-                else:
+                elif hasattr(self.oauth, 'customNsHandler'):
                     self.oauth.customNsHandler('oauth', oauth_cfg)
 
                 # Explicitly persist oauth config to Polyglot so PG3 has it for the Authenticate button
@@ -372,26 +378,78 @@ class Controller(BaseNode):
                     self.poly.send({'set': [{'key': 'oauth', 'value': oauth_cfg}]}, 'custom')
 
     def customNsHandler(self, key, data):
-        LOGGER.debug(f"customNsHandler called for {key}")
+        LOGGER.debug(f"customNsHandler called for {key}: {data}")
         try:
             # Polyglot sends empty customns values as empty strings ('') instead of dicts
             if isinstance(data, str):
                 data = {}
+            if not isinstance(data, dict):
+                data = {}
+
+            if hasattr(self, 'portalData') and hasattr(self.portalData, 'load'):
+                self.portalData.load(data)
+
+            if key == 'nsdata':
+                if 'portalID' in data:
+                    self.portalID = data['portalID']
+                    self.client_id = data['portalID']
+                elif 'client_id' in data:
+                    self.client_id = data['client_id']
+                    self.portalID = data['client_id']
+                elif 'clientId' in data:
+                    self.client_id = data['clientId']
+                    self.portalID = data['clientId']
+
+                if 'PortalSecret' in data:
+                    self.portalSecret = data['PortalSecret']
+                    self.client_secret = data['PortalSecret']
+                elif 'portalSecret' in data:
+                    self.portalSecret = data['portalSecret']
+                    self.client_secret = data['portalSecret']
+                elif 'client_secret' in data:
+                    self.client_secret = data['client_secret']
+                    self.portalSecret = data['client_secret']
+                elif 'clientSecret' in data:
+                    self.client_secret = data['clientSecret']
+                    self.portalSecret = data['clientSecret']
+
+                if self.client_id and self.client_secret:
+                    self.portalReady = True
+                    LOGGER.debug(f"CustomNS portal credentials received: {self.client_id}")
+
+            elif key == 'oauth':
+                if 'client_id' in data:
+                    self.client_id = data['client_id']
+                elif 'clientId' in data:
+                    self.client_id = data['clientId']
+
+                if 'client_secret' in data:
+                    self.client_secret = data['client_secret']
+                elif 'clientSecret' in data:
+                    self.client_secret = data['clientSecret']
+
+                if self.client_id and self.client_secret:
+                    self.portalReady = True
+                    LOGGER.debug(f"OAuth credentials received: {self.client_id}")
+
+            self.update_oauth_config()
 
             if key == 'oauth':
-                # Ensure OAuth config override is set from customparams if present
-                self.update_oauth_config()
-
                 # If PG3 sends empty oauth data and no credentials have been entered yet,
                 # do not pass empty data to self.oauth to avoid spurious error logs
                 override = getattr(self.oauth, '_oauthConfigOverride', {})
-                if not data and not (override and override.get('client_id')):
+                if not data and not (override and override.get('client_id')) and not self.client_id:
                     LOGGER.info("OAuth configuration is pending credentials in PG3 configuration.")
+                    self.customNsDone = True
                     self.customNsHandlerDone = True
                     return
 
-            self.oauth.customNsHandler(key, data or {})
-            self.customNsHandlerDone = True
+            if hasattr(self.oauth, 'customNsHandler'):
+                self.oauth.customNsHandler(key, data or {})
+
+            if key in ('oauth', 'oauthTokens', 'nsdata'):
+                self.customNsDone = True
+                self.customNsHandlerDone = True
             LOGGER.debug(f"customNsHandler finished for {key}")
         except Exception as e:
             LOGGER.error(f"Error handling customNs {key}: {e}")
@@ -399,12 +457,13 @@ class Controller(BaseNode):
     def configDoneHandler(self):
         LOGGER.info("configDoneHandler: PG3 initial configuration messages complete.")
         self.configDone = True
+        self.config_done = True
         self.update_oauth_config()
 
     def oauthHandler(self, token):
         try:
             wait_seconds = 0
-            while not self.handleCustomParamsDone and wait_seconds < 5:
+            while not (self.customParam_done or self.handleCustomParamsDone) and wait_seconds < 5:
                 time.sleep(0.5)
                 wait_seconds += 0.5
 
@@ -439,17 +498,22 @@ class Controller(BaseNode):
 
         self.update_oauth_config()
         self.handleCustomParamsDone = True
+        self.customParam_done = True
         LOGGER.debug("customParamsHandler finished")
 
     def start(self):
         LOGGER.info('Starting NuHeat NodeServer...')
 
-        # In PG3 multi-threaded startup, ensure customParams and customNs have had time to finish
+        # In PG3 multi-threaded startup, ensure customParams, customNS, and config are handled before starting
         wait_seconds = 0
-        while not (self.handleCustomParamsDone and (self.configDone or wait_seconds >= 5)) and wait_seconds < 10:
-            LOGGER.debug(f"Waiting for custom parameters to complete before start ({wait_seconds:.1f}s)...")
-            time.sleep(0.5)
-            wait_seconds += 0.5
+        max_wait = 15
+        while not (self.customParam_done and self.customNsDone and self.config_done and self.portalReady) and wait_seconds < max_wait:
+            LOGGER.info(
+                f"Waiting for node to initialize: customParams={self.customParam_done}, "
+                f"customNS={self.customNsDone}, configDone={self.config_done}, portalReady={self.portalReady} ({wait_seconds}s)"
+            )
+            time.sleep(1)
+            wait_seconds += 1
 
         self.update_oauth_config()
         self.setDriver('ST', 1, uom=2)

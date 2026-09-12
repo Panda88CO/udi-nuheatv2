@@ -51,8 +51,6 @@ class TestPG3Nodes(unittest.TestCase):
 
         params = {
             'tz': 'America/Chicago',
-            'clientId': 'my_client_id',
-            'clientSecret': 'my_client_secret',
             'TEMP_UNIT': 'C'
         }
         controller.customParamsHandler(params)
@@ -176,10 +174,12 @@ class TestPG3Nodes(unittest.TestCase):
         node.update_info()
         node.setDriver.assert_any_call('GV0', 60, uom=45)
         node.setDriver.assert_any_call('ST', 1.25, uom=33)
-        node.setDriver.assert_any_call('GV1', 0.18, uom=103)
         time_calls = [c for c in node.setDriver.call_args_list if c[0][0] == 'TIME']
         self.assertEqual(len(time_calls), 1)
         self.assertEqual(time_calls[0][1].get('uom'), 151)
+        # Verify GV1 is no longer called
+        gv1_calls = [c for c in node.setDriver.call_args_list if c[0][0] == 'GV1']
+        self.assertEqual(len(gv1_calls), 0)
 
     def test_energy_log_week_and_year_nodes(self):
         controller = MagicMock()
@@ -193,14 +193,12 @@ class TestPG3Nodes(unittest.TestCase):
         week_node.update_info()
         week_node.setDriver.assert_any_call('GV0', 420, uom=45)
         week_node.setDriver.assert_any_call('ST', 8.75, uom=33)
-        week_node.setDriver.assert_any_call('GV1', 1.26, uom=103)
 
         year_node = EnergyLogYearNode(self.mock_poly, '99887766', 'ely99887766', 'Energy-Year', controller)
         year_node.setDriver = MagicMock()
         year_node.update_info()
         year_node.setDriver.assert_any_call('GV0', 5000, uom=45)
         year_node.setDriver.assert_any_call('ST', 104.2, uom=33)
-        year_node.setDriver.assert_any_call('GV1', 15.0, uom=103)
 
     def test_profile_builder(self):
         profile_f = _build_profile_definition("F")
@@ -221,10 +219,14 @@ class TestPG3Nodes(unittest.TestCase):
         nodedef_ids = {nd["id"] for nd in profile_f["nodedefs"]}
         self.assertEqual(nodedef_ids, {"controller", "THERMOSTAT", "ENERGYLOG"})
 
-        # Verify TIME driver in each nodedef
+        # Verify TIME driver in each nodedef and GV1 is removed
+        editor_ids = {e["id"] for e in profile_f["editors"]}
+        self.assertNotIn("GV1", editor_ids)
+
         for nd in profile_f["nodedefs"]:
             prop_ids = {p["id"] for p in nd["properties"]}
             self.assertIn("TIME", prop_ids, f"Node {nd['id']} missing TIME property")
+            self.assertNotIn("GV1", prop_ids, f"Node {nd['id']} should not contain GV1 property")
 
     def test_node_done_and_wait_confirmation(self):
         controller = Controller(self.mock_poly, 'controller', 'controller', 'NuHeat')
@@ -239,6 +241,42 @@ class TestPG3Nodes(unittest.TestCase):
         controller.node_deleted({"address": "99887766"})
         self.assertNotIn("99887766", controller._confirmed_node_addresses)
         self.assertIn("99887766", controller._deleted_node_addresses)
+
+    def test_controller_custom_ns_oauth_credentials(self):
+        controller = Controller(self.mock_poly, 'controller', 'controller', 'NuHeat')
+        controller.oauth.customNsHandler = MagicMock()
+        controller.customNsHandler('oauth', {'client_id': 'test_oauth_id', 'client_secret': 'test_oauth_sec'})
+        self.assertEqual(controller.client_id, 'test_oauth_id')
+        self.assertEqual(controller.client_secret, 'test_oauth_sec')
+        self.assertTrue(controller.portalReady)
+        self.assertTrue(controller.customNsDone)
+        self.assertTrue(controller.customNsHandlerDone)
+        controller.oauth.customNsHandler.assert_called_once_with('oauth', {'client_id': 'test_oauth_id', 'client_secret': 'test_oauth_sec'})
+
+    def test_controller_custom_ns_nsdata_credentials(self):
+        controller = Controller(self.mock_poly, 'controller', 'controller', 'NuHeat')
+        controller.oauth.updateOauthSettings = MagicMock()
+        controller.customNsHandler('nsdata', {'portalID': 'test_portal_id', 'PortalSecret': 'test_portal_secret'})
+        self.assertEqual(controller.portalID, 'test_portal_id')
+        self.assertEqual(controller.portalSecret, 'test_portal_secret')
+        self.assertEqual(controller.client_id, 'test_portal_id')
+        self.assertEqual(controller.client_secret, 'test_portal_secret')
+        self.assertTrue(controller.portalReady)
+        self.assertTrue(controller.customNsDone)
+
+    def test_controller_start_synchronization(self):
+        controller = Controller(self.mock_poly, 'controller', 'controller', 'NuHeat')
+        controller.customParam_done = True
+        controller.customNsDone = True
+        controller.config_done = True
+        controller.portalReady = True
+        controller.get_access_token = MagicMock(return_value='test_valid_token')
+        controller.discover = MagicMock()
+        controller._publish_profile = MagicMock()
+
+        controller.start()
+        controller.discover.assert_called_once()
+        self.assertEqual(controller.drivers[0]['value'], 1)  # ST driver
 
 
 if __name__ == '__main__':

@@ -32,8 +32,12 @@ In your PG3/PG3x NodeServer dashboard, configure the following keys under **Conf
 | `clientId` | string | Your NuHeat OAuth Client ID (Required) | *(none)* |
 | `clientSecret` | string | Your NuHeat OAuth Client Secret (Required) | *(none)* |
 | `tz` | string | Your local tz database timezone name (Required for accurate energy log timestamps) | `America/New_York` |
+| `TEMP_UNIT` | string | *(Optional)* Override temperature unit: `F` for Fahrenheit (UOM 17) or `C` for Celsius (UOM 4). Auto-detected from NuHeat account if omitted. | *(auto)* |
 
 *A complete list of timezone names can be found in the [tz database time zones list](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) (e.g., `America/New_York`, `America/Chicago`, `America/Denver`, `America/Los_Angeles`).*
+
+> [!NOTE]
+> Client ID and Client Secret are managed directly in PG3's OAuth / customNS configuration (similar to TeslaEVstream). They are no longer required as custom configuration parameters.
 
 ---
 
@@ -44,6 +48,10 @@ In your PG3/PG3x NodeServer dashboard, configure the following keys under **Conf
 3. Click the **Authenticate** button in the PG3 NodeServer details page.
 4. Log into your **[My NuHeat](https://mynuheat.com)** account in the browser window and approve access.
 5. Once authorized, the NodeServer will automatically discover your thermostats and create the corresponding nodes in your Admin Console.
+1. Configure `tz` (and optionally `TEMP_UNIT`) in **Custom Configuration Parameters** and click **Save**.
+2. When the OAuth configuration is loaded in PG3, click the **Authenticate** button in the PG3 NodeServer details page.
+3. Log into your **[My NuHeat](https://mynuheat.com)** account in the browser window and approve access.
+4. Once authorized, the NodeServer will automatically discover your thermostats and create the corresponding nodes in your Admin Console.
 
 ---
 
