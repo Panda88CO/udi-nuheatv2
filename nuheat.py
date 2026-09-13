@@ -6,7 +6,7 @@ import threading
 
 from nodes.base import LOGGER, BaseNode
 
-VERSION = "2.1.3"
+VERSION = "2.1.4"
 
 try:
     import udi_interface
@@ -65,12 +65,12 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
     if temp_unit == "C":
         clitemp_ranges = [
             {"uom": "4", "min": 5, "max": 40, "step": 1, "prec": 0},
-            {"uom": "25", "subset": "-1, -2", "names": {"-1": "Invalid", "-2": "Permanent Hold"}},
+            {"uom": "25", "subset": "0,1", "names": {"0": "Schedule", "1": "Permanent Hold"}},
         ]
     else:
         clitemp_ranges = [
             {"uom": "17", "min": 41, "max": 104, "step": 1, "prec": 0},
-            {"uom": "25", "subset": "-1, -2", "names": {"-1": "Invalid", "-2": "Permanent Hold"}},
+            {"uom": "25", "subset": "0,1", "names": {"0": "Schedule", "1": "Permanent Hold"}},
         ]
 
     editors = [
@@ -110,10 +110,10 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
                 {"uom": "151", "min": 0, "max": 4294967295, "prec": 0},
                 {
                     "uom": "25",
-                    "subset": "-2,-1",
+                    "subset": "0,1",
                     "names": {
-                        "-1": "Invalid",
-                        "-2": "Permanent Hold",
+                        "0": "Schedule",
+                        "1": "Permanent Hold",
                     },
                 },
             ],
@@ -177,7 +177,7 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
             ],
             "cmds": {
                 "accepts": [
-                    {"id": "QUERY", "name": "Query"},
+                    {"id": "UPDATE", "name": "Force Update"},
                     {
                         "id": "SET_MODE",
                         "name": "Set Mode",
@@ -753,7 +753,6 @@ class Controller(BaseNode):
 
     commands = {
         'UPDATE': update_nodes,
-
     }
 
 

@@ -37,7 +37,7 @@ In your PG3/PG3x NodeServer dashboard, configure the following keys under **Conf
  
 The thermostat uses a single consolidated command, **`SET_MODE`**, with up to 3 parameters:
 - **Mode (`mode`)**:
-  - `1` = **Auto**: Follows internal schedule. Temperature and hold minutes are ignored. Setpoint (`CLISPH`) and Hold End Time (`GV4`) display as `Invalid`.
+  - `1` = **Auto**: Follows internal schedule. Temperature and hold minutes are ignored. Setpoint (`CLISPH`) and Hold End Time (`GV4`) display as `Schedule`.
   - `2` = **Hold**: Temporary hold using target `temp` and `hold` duration in minutes. Sets `GV4` to the hold expiration timestamp (Unix epoch timestamp, UOM 151).
   - `3` = **Permanent Hold**: Manual hold using target `temp` indefinitely. Hold minutes is ignored and `GV4` displays as `Permanent Hold`.
 - **Temperature (`temp`)**: Target setpoint in °F or °C (ignored in Auto).
@@ -59,10 +59,10 @@ For each thermostat discovered on your account, a single unified primary node is
 2. **Thermostat Node** (`°F` or `°C` selected based on your `temp_unit` configuration or NuHeat account preferences).
    - **Status Drivers**:
      - Current Temperature (`ST`)
-     - Heat Setpoint (`CLISPH` — displays `Invalid` in Auto mode)
+     - Heat Setpoint (`CLISPH` — displays `Schedule` in Auto mode)
      - Operating Mode (`CLIMD` — Auto, Hold, Permanent Hold)
      - Heat State (`CLIHCS` — Idle, Heating)
-     - Hold End Time (`GV4` — displays expiration timestamp [UOM 151] on Hold; displays `Permanent Hold` in Permanent Hold mode, and `Invalid` in Auto mode)
+     - Hold End Time (`GV4` — displays expiration timestamp [UOM 151] on Hold; displays `Permanent Hold` in Permanent Hold mode, and `Schedule` in Auto mode)
      - Online Status (`GV5` — Online / Offline, UOM 2)
      - Last Update (`TIME` — timestamp, UOM 151)
      - Daily Energy (`GV0` — kWh, UOM 33)

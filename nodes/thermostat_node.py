@@ -32,7 +32,7 @@ class ThermostatNode(BaseNode):
         {'driver': 'GV1', 'value': 0, 'uom': 33},
         {'driver': 'GV2', 'value': 0, 'uom': 33},
         {'driver': 'GV3', 'value': 0, 'uom': 33},
-        {'driver': 'GV4', 'value': -1, 'uom': 25},
+        {'driver': 'GV4', 'value': 0, 'uom': 25},
         {'driver': 'GV5', 'value': 1, 'uom': 2},
         {'driver': 'TIME', 'value': 0, 'uom': 151}
     ]
@@ -91,8 +91,8 @@ class ThermostatNode(BaseNode):
             if mode_val == 1:
                 # Auto (Follow Schedule) - setpoint and hold time are not applicable
                 self.setDriver('CLIMD', 1, uom=25)
-                self.setDriver('CLISPH', -1, uom=25)
-                self.setDriver('GV4', -1, uom=25)
+                self.setDriver('CLISPH', 0, uom=25)
+                self.setDriver('GV4', 0, uom=25)
             elif mode_val == 2:
                 # Temporary Hold
                 self.setDriver('CLIMD', 2, uom=25)
@@ -108,12 +108,12 @@ class ThermostatNode(BaseNode):
                 if hold_end_ts is not None and hold_end_ts > 0:
                     self.setDriver('GV4', hold_end_ts, uom=151)
                 else:
-                    self.setDriver('GV4', -1, uom=25)
+                    self.setDriver('GV4', 0, uom=25)
             else:
                 # 3 = Permanent Hold (Manual) - hold duration is permanent
                 self.setDriver('CLIMD', 3, uom=25)
                 self.setDriver('CLISPH', clisph, uom=self.temp_uom)
-                self.setDriver('GV4', -2, uom=25)
+                self.setDriver('GV4', 1, uom=25)
 
             online_val = 1 if stat.get('online', True) else 0
             self.setDriver('GV5', online_val, uom=2)
@@ -200,8 +200,8 @@ class ThermostatNode(BaseNode):
             ok = nuheat_client.set_mode_auto(self.address)
             if ok:
                 self.setDriver('CLIMD', 1, uom=25)
-                self.setDriver('CLISPH', -1, uom=25)
-                self.setDriver('GV4', -1, uom=25)
+                self.setDriver('CLISPH', 0, uom=25)
+                self.setDriver('GV4', 0, uom=25)
                 self.setDriver('TIME', int(time.time()), uom=151)
             else:
                 LOGGER.error(f"set_mode_auto failed for {self.address}")
@@ -217,8 +217,7 @@ class ThermostatNode(BaseNode):
                 curr_sp = self.getDriver('CLISPH')
                 curr_val = curr_sp.get('value') if isinstance(curr_sp, dict) else None
                 try:
-                    temp = float(curr_val) if curr_val not in (None, 97, '97') else (72 if self.temp_uom == 17 else 22)
-                    temp = float(curr_val) if curr_val not in (None, -1, '-1') else (72 if self.temp_uom == 17 else 22)
+                    temp = float(curr_val) if curr_val not in (None, 97, '97', -1, '-1', 0, '0') else (72 if self.temp_uom == 17 else 22)
                 except (TypeError, ValueError):
                     temp = 72 if self.temp_uom == 17 else 22
 
@@ -231,7 +230,7 @@ class ThermostatNode(BaseNode):
             if ok:
                 self.setDriver('CLIMD', 3, uom=25)
                 self.setDriver('CLISPH', temp, uom=self.temp_uom)
-                self.setDriver('GV4', -2, uom=25)
+                self.setDriver('GV4', 1, uom=25)
                 self.setDriver('TIME', int(time.time()), uom=151)
             else:
                 LOGGER.error(f"set_mode_manual failed for {self.address}")
@@ -247,8 +246,7 @@ class ThermostatNode(BaseNode):
                 curr_sp = self.getDriver('CLISPH')
                 curr_val = curr_sp.get('value') if isinstance(curr_sp, dict) else None
                 try:
-                    temp = float(curr_val) if curr_val not in (None, 97, '97') else (72 if self.temp_uom == 17 else 22)
-                    temp = float(curr_val) if curr_val not in (None, -1, '-1') else (72 if self.temp_uom == 17 else 22)
+                    temp = float(curr_val) if curr_val not in (None, 97, '97', -1, '-1', 0, '0') else (72 if self.temp_uom == 17 else 22)
                 except (TypeError, ValueError):
                     temp = 72 if self.temp_uom == 17 else 22
 
@@ -322,14 +320,14 @@ class ThermostatNode(BaseNode):
             self.setDriver('CLISPH', val, uom=self.temp_uom)
             if mode_val == 1:
                 self.setDriver('CLIMD', 3, uom=25)
-                self.setDriver('GV4', -2, uom=25)
+                self.setDriver('GV4', 1, uom=25)
             self.setDriver('TIME', int(time.time()), uom=151)
         else:
             LOGGER.error(f"thermostat_node.setpoint_heat failed for {self.address}")
 
     commands = {
         'SET_MODE': set_mode,
-
+        'UPDATE': update_info,
     }
 
 

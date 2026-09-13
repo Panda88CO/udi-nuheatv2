@@ -206,13 +206,13 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertEqual(node.id, 'THERMOSTAT')
         node.setDriver = MagicMock()
 
-        # Test update_info in Auto mode (CLISPH and GV4 cast to Invalid)
+        # Test update_info in Auto mode (CLISPH and GV4 cast to Schedule)
         node.update_info()
         node.setDriver.assert_any_call('ST', 68.0, uom=17)
         node.setDriver.assert_any_call('CLIHCS', 1, uom=66)
         node.setDriver.assert_any_call('CLIMD', 1, uom=25)
-        node.setDriver.assert_any_call('CLISPH', -1, uom=25)
-        node.setDriver.assert_any_call('GV4', -1, uom=25)
+        node.setDriver.assert_any_call('CLISPH', 0, uom=25)
+        node.setDriver.assert_any_call('GV4', 0, uom=25)
         node.setDriver.assert_any_call('GV5', 1, uom=2)
 
         # Test SET_MODE - Permanent Hold (mode 3, ignores hold)
@@ -220,7 +220,7 @@ class TestPG3Nodes(unittest.TestCase):
         controller.NuHeat.set_mode_manual.assert_called_once_with('99887766', 2222)
         node.setDriver.assert_any_call('CLIMD', 3, uom=25)
         node.setDriver.assert_any_call('CLISPH', 72.0, uom=17)
-        node.setDriver.assert_any_call('GV4', -2, uom=25)
+        node.setDriver.assert_any_call('GV4', 1, uom=25)
 
         # Test SET_MODE - Temporary Hold (mode 2, calculates stop time as unix timestamp)
         node.set_mode({'query': {'mode.uom25': '2', 'temp.uom17': '70', 'hold.uom45': '90'}})
@@ -252,8 +252,8 @@ class TestPG3Nodes(unittest.TestCase):
         node.set_mode({'query': {'mode': '1', 'temp': '75', 'hold': '60'}})
         controller.NuHeat.set_mode_auto.assert_called_once_with('99887766')
         node.setDriver.assert_any_call('CLIMD', 1, uom=25)
-        node.setDriver.assert_any_call('CLISPH', -1, uom=25)
-        node.setDriver.assert_any_call('GV4', -1, uom=25)
+        node.setDriver.assert_any_call('CLISPH', 0, uom=25)
+        node.setDriver.assert_any_call('GV4', 0, uom=25)
 
         # Test update_energy
         controller.NuHeat.get_energy_log_day.return_value = [60, 1.25, 0.18]
@@ -293,7 +293,7 @@ class TestPG3Nodes(unittest.TestCase):
         node.setDriver.assert_any_call('CLISPH', 21.0, uom=4)
         node.setDriver.assert_any_call('CLIMD', 3, uom=25)
         node.setDriver.assert_any_call('CLIHCS', 0, uom=66)
-        node.setDriver.assert_any_call('GV4', -2, uom=25)
+        node.setDriver.assert_any_call('GV4', 1, uom=25)
         node.setDriver.assert_any_call('GV5', 0, uom=2)
 
     def test_energy_log_day_node(self):
@@ -340,20 +340,22 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertIn("nodedefs", profile_f)
         self.assertEqual(profile_f["linkdefs"], [])
 
-        # Check CLITEMP editor ranges in F mode (only UOM 17 and UOM 25 subset -1)
+        # Check CLITEMP editor ranges in F mode (only UOM 17 and UOM 25 subset 0,1)
         clitemp_editor = next(e for e in profile_f["editors"] if e["id"] == "CLITEMP")
         self.assertEqual(len(clitemp_editor["ranges"]), 2)
         self.assertEqual(clitemp_editor["ranges"][0]["uom"], "17")
         self.assertEqual(clitemp_editor["ranges"][1]["uom"], "25")
-        self.assertEqual(clitemp_editor["ranges"][1]["subset"], "-1, -2")
+        self.assertEqual(clitemp_editor["ranges"][1]["subset"], "0,1")
+        self.assertEqual(clitemp_editor["ranges"][1]["names"], {"0": "Schedule", "1": "Permanent Hold"})
 
-        # Check CLITEMP editor ranges in C mode (only UOM 4 and UOM 25 subset -1, -2)
+        # Check CLITEMP editor ranges in C mode (only UOM 4 and UOM 25 subset 0,1)
         profile_c = _build_profile_definition("C")
         clitemp_c = next(e for e in profile_c["editors"] if e["id"] == "CLITEMP")
         self.assertEqual(len(clitemp_c["ranges"]), 2)
         self.assertEqual(clitemp_c["ranges"][0]["uom"], "4")
         self.assertEqual(clitemp_c["ranges"][1]["uom"], "25")
-        self.assertEqual(clitemp_c["ranges"][1]["subset"], "-1, -2")
+        self.assertEqual(clitemp_c["ranges"][1]["subset"], "0,1")
+        self.assertEqual(clitemp_c["ranges"][1]["names"], {"0": "Schedule", "1": "Permanent Hold"})
 
         # Verify nodedefs include controller and THERMOSTAT
         nodedef_ids = {nd["id"] for nd in profile_f["nodedefs"]}

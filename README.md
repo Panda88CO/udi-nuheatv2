@@ -71,10 +71,10 @@ The NodeServer automatically detects your account's preferred temperature scale 
     - **Update (`UPDATE`)**: Immediately forces an update across all nodes and queries fresh energy metrics (executes long poll).
 
 - **Thermostat Node (`°F` or `°C`)**:
-  - **Temperature & Setpoint**: Reports current temperature (`ST`) and target setpoint (`CLISPH` — displays `Invalid` in Auto mode).
+  - **Temperature & Setpoint**: Reports current temperature (`ST`) and target setpoint (`CLISPH` — displays `Schedule` in Auto mode).
   - **Operating Mode (`CLIMD`)**: Auto, Hold, or Permanent Hold.
   - **Heat State (`CLIHCS`)**: Idle or Heating.
-  - **Hold End Time (`GV4`)**: Displays the hold expiration timestamp (Unix epoch timestamp, UOM 151) when on Hold; displays `Permanent Hold` in Permanent Hold mode, and `Invalid` in Auto mode.
+  - **Hold End Time (`GV4`)**: Displays the hold expiration timestamp (Unix epoch timestamp, UOM 151) when on Hold; displays `Permanent Hold` in Permanent Hold mode, and `Schedule` in Auto mode.
   - **Online Status (`GV5`)**: Thermostat connection status (Online / Offline, UOM 2).
   - **Last Update (`TIME`)**: Unix epoch timestamp (UOM 151) of the last data refresh for this thermostat.
   - **Commands**:
