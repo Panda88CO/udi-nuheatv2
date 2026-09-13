@@ -97,17 +97,16 @@ class ThermostatNode(BaseNode):
                 # Temporary Hold
                 self.setDriver('CLIMD', 2, uom=25)
                 self.setDriver('CLISPH', clisph, uom=self.temp_uom)
-                remaining_minutes = 0
+                hold_end_ts = None
                 if hold_until:
                     try:
                         clean_str = str(hold_until).replace('Z', '+00:00')
                         target_dt = datetime.fromisoformat(clean_str)
-                        now_utc = datetime.now(timezone.utc)
-                        remaining_minutes = max(0, int((target_dt - now_utc).total_seconds() / 60))
+                        hold_end_ts = int(target_dt.timestamp())
                     except Exception as e:
                         LOGGER.warning(f"Could not parse holdUntil '{hold_until}': {e}")
-                if remaining_minutes > 0:
-                    self.setDriver('GV4', remaining_minutes, uom=45)
+                if hold_end_ts is not None and hold_end_ts > 0:
+                    self.setDriver('GV4', hold_end_ts, uom=151)
                 else:
                     self.setDriver('GV4', -1, uom=25)
             else:
@@ -125,7 +124,7 @@ class ThermostatNode(BaseNode):
             self.setDriver('GV5', 0, uom=2)
             self.setDriver('TIME', int(time.time()), uom=151)
 
-    def update_energy(self):
+    def update_energy(self, force: bool = False):
         nuheat_client = getattr(self.controller, 'NuHeat', None)
         if nuheat_client is None:
             LOGGER.error("NuHeat client not available on controller")
@@ -141,29 +140,43 @@ class ThermostatNode(BaseNode):
         year_str = str(now.year)
         month_num = now.month
 
+        LOGGER.info(
+            f"Retrieving energy data for thermostat {self.address} ({self.name}): "
+            f"Date={date_str}, Month={month_num}, Year={year_str} (tz={tz_name})"
+        )
+
         # Daily Energy (GV0)
         day_used = nuheat_client.get_energy_log_day(self.address, date_str)
-        if day_used is not None:
-            self.setDriver('GV0', day_used[1], uom=33)
+        day_val = day_used[1] if day_used is not None else 0.0
+        self.setDriver('GV0', day_val, uom=33)
 
         # Last 7 Days Energy (GV1)
         week_used = nuheat_client.get_energy_log_week(self.address, date_str)
-        if week_used is not None:
-            self.setDriver('GV1', week_used[1], uom=33)
+        week_val = week_used[1] if week_used is not None else 0.0
+        self.setDriver('GV1', week_val, uom=33)
 
         # Monthly Energy (GV2)
-        month_used = nuheat_client.get_energy_log_month(self.address, year_str, month_num)
-        if month_used is not None:
-            self.setDriver('GV2', month_used[1], uom=33)
+        month_used = nuheat_client.get_energy_log_month(self.address, year_str, month_num, force=force)
+        month_val = month_used[1] if month_used is not None else 0.0
+        self.setDriver('GV2', month_val, uom=33)
 
         # Yearly Energy (GV3)
-        year_used = nuheat_client.get_energy_log_year(self.address, year_str)
-        if year_used is not None:
-            self.setDriver('GV3', year_used[1], uom=33)
+        year_used = nuheat_client.get_energy_log_year(self.address, year_str, force=force)
+        year_val = year_used[1] if year_used is not None else 0.0
+        self.setDriver('GV3', year_val, uom=33)
 
         self.setDriver('TIME', int(time.time()), uom=151)
 
+        LOGGER.info(
+            f"Thermostat {self.address} ({self.name}) Energy Updated -> "
+            f"Daily (GV0): {day_val} kWh, 7-Day (GV1): {week_val} kWh, "
+            f"Monthly (GV2): {month_val} kWh, Yearly (GV3): {year_val} kWh"
+        )
+
     def query(self, command=None):
+        LOGGER.info(f"Querying thermostat {self.address} ({self.name})...")
+        self.update_info()
+        self.update_energy(force=True)
         self.reportDrivers()
 
     def set_mode(self, command):
@@ -240,15 +253,20 @@ class ThermostatNode(BaseNode):
                     temp = 72 if self.temp_uom == 17 else 22
 
             try:
-                hold_minutes = int(raw_hold) if raw_hold is not None else 60
+                hold_val = int(raw_hold) if raw_hold is not None else 60
             except (TypeError, ValueError):
-                hold_minutes = 60
-            if hold_minutes <= 0:
-                hold_minutes = 60
+                hold_val = 60
 
             now_utc = datetime.now(timezone.utc)
-            stop_utc = now_utc + timedelta(minutes=hold_minutes)
+            if hold_val > 100000:
+                stop_utc = datetime.fromtimestamp(hold_val, timezone.utc)
+            else:
+                if hold_val <= 0:
+                    hold_val = 60
+                stop_utc = now_utc + timedelta(minutes=hold_val)
+
             hold_until_str = stop_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
+            hold_end_ts = int(stop_utc.timestamp())
 
             if self.temp_uom == 17:
                 new_setpoint = nuheat_client.nuheat_fahrenheit_to_celsius_json(temp)
@@ -259,7 +277,7 @@ class ThermostatNode(BaseNode):
             if ok:
                 self.setDriver('CLIMD', 2, uom=25)
                 self.setDriver('CLISPH', temp, uom=self.temp_uom)
-                self.setDriver('GV4', hold_minutes, uom=45)
+                self.setDriver('GV4', hold_end_ts, uom=151)
                 self.setDriver('TIME', int(time.time()), uom=151)
             else:
                 LOGGER.error(f"set_mode_hold failed for {self.address}")

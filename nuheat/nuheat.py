@@ -207,13 +207,21 @@ class NuHeat:
         if not resp or 'energyUsage' not in resp:
             return None
 
+        entries = resp.get('energyUsage')
+        if isinstance(entries, dict):
+            entries = [entries]
+        elif not isinstance(entries, list):
+            return None
+
         minutes = 0
-        raw_energy_kw_hour = 0
-        raw_charge_kw_hour = 0
-        for entry in resp['energyUsage']:
-            minutes += entry.get('minutes', 0)
-            raw_energy_kw_hour += entry.get('energyKWattHour', 0)
-            raw_charge_kw_hour += entry.get('chargeKWattHour', 0)
+        raw_energy_kw_hour = 0.0
+        raw_charge_kw_hour = 0.0
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            minutes += int(entry.get('minutes') or 0)
+            raw_energy_kw_hour += float(entry.get('energyKWattHour') or 0.0)
+            raw_charge_kw_hour += float(entry.get('chargeKWattHour') or 0.0)
 
         energy_kw_hour = round(raw_energy_kw_hour, 2)
         cents_charge_kw_hour = round(raw_charge_kw_hour, 2)
@@ -226,7 +234,10 @@ class NuHeat:
             r = requests.get(energy_log_url, headers=self.headers)
             self._log_response("GET", energy_log_url, r)
             if r.status_code == requests.codes.ok:
-                return self._parse_energy_usage(r.json())
+                result = self._parse_energy_usage(r.json())
+                if result:
+                    LOGGER.info(f"NuHeat Day Energy for {serial_number} on {date}: {result[1]} kWh ({result[0]} mins)")
+                return result
             else:
                 LOGGER.error(f"get_energy_log_day Error: {r.status_code} - {r.content}")
                 return None
@@ -240,7 +251,10 @@ class NuHeat:
             r = requests.get(energy_log_url, headers=self.headers)
             self._log_response("GET", energy_log_url, r)
             if r.status_code == requests.codes.ok:
-                return self._parse_energy_usage(r.json())
+                result = self._parse_energy_usage(r.json())
+                if result:
+                    LOGGER.info(f"NuHeat Week Energy for {serial_number} up to {date}: {result[1]} kWh ({result[0]} mins)")
+                return result
             else:
                 LOGGER.error(f"get_energy_log_week Error: {r.status_code} - {r.content}")
                 return None
@@ -248,10 +262,10 @@ class NuHeat:
             LOGGER.error(f"NuHeat.get_energy_log_week Error: {e}")
             return None
 
-    def _fetch_energy_log_month(self, serial_number, year):
+    def _fetch_energy_log_month(self, serial_number, year, force: bool = False):
         cache_key = (str(serial_number), str(year))
         now = time.time()
-        if hasattr(self, '_month_cache') and cache_key in self._month_cache:
+        if not force and hasattr(self, '_month_cache') and cache_key in self._month_cache:
             cached_time, cached_json = self._month_cache[cache_key]
             if now - cached_time < 300:
                 return cached_json
@@ -273,27 +287,84 @@ class NuHeat:
             LOGGER.error(f"NuHeat EnergyLog Month Error: {e}")
             return None
 
-    def get_energy_log_month(self, serial_number, year, month):
-        resp = self._fetch_energy_log_month(serial_number, year)
+    def get_energy_log_month(self, serial_number, year, month, force: bool = False):
+        resp = self._fetch_energy_log_month(serial_number, year, force=force)
         if not resp or 'energyUsage' not in resp:
             return None
 
-        target_entry = str(month)
-        for entry in resp['energyUsage']:
-            if str(entry.get('entry')) == target_entry:
-                minutes = entry.get('minutes', 0)
-                raw_kwh = entry.get('energyKWattHour', 0)
-                raw_charge = entry.get('chargeKWattHour', 0)
+        try:
+            m_int = int(month)
+        except (TypeError, ValueError):
+            m_int = 1
+
+        target_1based = {str(m_int), f"{m_int:02d}"}
+        target_0based = {str(m_int - 1), f"{(m_int - 1):02d}"}
+
+        entries = resp.get('energyUsage')
+        if isinstance(entries, dict):
+            entries = [entries]
+        elif not isinstance(entries, list):
+            entries = []
+
+        # 1-based matching (e.g. "9" for September)
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            e_str = str(entry.get('entry', '')).strip()
+            if e_str in target_1based:
+                minutes = int(entry.get('minutes') or 0)
+                raw_kwh = float(entry.get('energyKWattHour') or 0.0)
+                raw_charge = float(entry.get('chargeKWattHour') or 0.0)
                 energy_kw_hour = round(raw_kwh, 2)
                 cents_charge = round(raw_charge, 2)
                 usd_charge = self.nuheat_cents_to_dollars(cents_charge)
+                LOGGER.info(f"NuHeat Month Energy for {serial_number} (Month {month}/{year}): {energy_kw_hour} kWh")
                 return [minutes, energy_kw_hour, usd_charge]
 
+        # Fallback 0-based matching
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            e_str = str(entry.get('entry', '')).strip()
+            if e_str in target_0based:
+                minutes = int(entry.get('minutes') or 0)
+                raw_kwh = float(entry.get('energyKWattHour') or 0.0)
+                raw_charge = float(entry.get('chargeKWattHour') or 0.0)
+                energy_kw_hour = round(raw_kwh, 2)
+                cents_charge = round(raw_charge, 2)
+                usd_charge = self.nuheat_cents_to_dollars(cents_charge)
+                LOGGER.info(f"NuHeat Month Energy for {serial_number} (Month {month}/{year}, 0-based): {energy_kw_hour} kWh")
+                return [minutes, energy_kw_hour, usd_charge]
+
+        LOGGER.warning(f"NuHeat Month {month} not found for {serial_number} in year {year}")
         return [0, 0.0, 0.0]
 
-    def get_energy_log_year(self, serial_number, year):
-        resp = self._fetch_energy_log_month(serial_number, year)
+    def get_energy_log_year(self, serial_number, year, force: bool = False):
+        resp = self._fetch_energy_log_month(serial_number, year, force=force)
         if resp is not None:
-            return self._parse_energy_usage(resp)
+            result = self._parse_energy_usage(resp)
+            if result:
+                LOGGER.info(f"NuHeat Year Energy for {serial_number} for {year}: {result[1]} kWh ({result[0]} mins)")
+            return result
         return None
+
+    def get_energy_summary(self, serial_number, date_str, year_str, month_num, force: bool = False):
+        """
+        Retrieves Day, Week, Month, and Year energy usage and returns a convenient summary dictionary.
+        """
+        day_used = self.get_energy_log_day(serial_number, date_str)
+        week_used = self.get_energy_log_week(serial_number, date_str)
+        month_used = self.get_energy_log_month(serial_number, year_str, month_num, force=force)
+        year_used = self.get_energy_log_year(serial_number, year_str, force=force)
+
+        return {
+            'day': day_used[1] if day_used else 0.0,
+            'week': week_used[1] if week_used else 0.0,
+            'month': month_used[1] if month_used else 0.0,
+            'year': year_used[1] if year_used else 0.0,
+            'day_data': day_used,
+            'week_data': week_used,
+            'month_data': month_used,
+            'year_data': year_used,
+        }
 

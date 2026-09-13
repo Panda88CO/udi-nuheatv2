@@ -1,5 +1,6 @@
 import importlib.util
 import os
+import time
 import unittest
 from unittest.mock import MagicMock, patch
 from nuheat import NuHeat
@@ -134,6 +135,10 @@ class TestPG3Nodes(unittest.TestCase):
             'mode': 2,
             'isHeating': True
         }])
+        controller.NuHeat.get_energy_log_day = MagicMock(return_value=[60, 1.25, 0.18])
+        controller.NuHeat.get_energy_log_week = MagicMock(return_value=[420, 8.75, 1.26])
+        controller.NuHeat.get_energy_log_month = MagicMock(return_value=[1800, 35.50, 4.50])
+        controller.NuHeat.get_energy_log_year = MagicMock(return_value=[5000, 104.20, 15.00])
 
         controller.discover()
         self.assertEqual(controller.disco, 1)
@@ -154,6 +159,10 @@ class TestPG3Nodes(unittest.TestCase):
             'mode': 2,
             'isHeating': True
         }])
+        controller.NuHeat.get_energy_log_day = MagicMock(return_value=[60, 1.25, 0.18])
+        controller.NuHeat.get_energy_log_week = MagicMock(return_value=[420, 8.75, 1.26])
+        controller.NuHeat.get_energy_log_month = MagicMock(return_value=[1800, 35.50, 4.50])
+        controller.NuHeat.get_energy_log_year = MagicMock(return_value=[5000, 104.20, 15.00])
 
         existing_node = MagicMock()
         existing_node.primary = 'controller'
@@ -213,7 +222,7 @@ class TestPG3Nodes(unittest.TestCase):
         node.setDriver.assert_any_call('CLISPH', 72.0, uom=17)
         node.setDriver.assert_any_call('GV4', -2, uom=25)
 
-        # Test SET_MODE - Temporary Hold (mode 2, calculates stop time)
+        # Test SET_MODE - Temporary Hold (mode 2, calculates stop time as unix timestamp)
         node.set_mode({'query': {'mode.uom25': '2', 'temp.uom17': '70', 'hold.uom45': '90'}})
         self.assertEqual(controller.NuHeat.set_mode_hold.call_count, 1)
         call_args = controller.NuHeat.set_mode_hold.call_args[0]
@@ -222,7 +231,22 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertTrue(controller.NuHeat.set_mode_hold.call_args[1].get('hold_until').endswith('Z'))
         node.setDriver.assert_any_call('CLIMD', 2, uom=25)
         node.setDriver.assert_any_call('CLISPH', 70.0, uom=17)
-        node.setDriver.assert_any_call('GV4', 90, uom=45)
+        gv4_calls = [c for c in node.setDriver.call_args_list if c[0][0] == 'GV4' and c[1].get('uom') == 151]
+        self.assertEqual(len(gv4_calls), 1)
+        self.assertGreater(gv4_calls[0][0][1], int(time.time()))
+
+        # Test update_info with holdUntil parses timestamp
+        controller.NuHeat.get_thermostat.return_value = {
+            'serialNumber': '99887766',
+            'currentTemperature': 2000,
+            'setPointTemperature': 2100,
+            'mode': 2,
+            'isHeating': True,
+            'online': True,
+            'holdUntil': '2026-09-12T20:00:00Z'
+        }
+        node.update_info()
+        node.setDriver.assert_any_call('GV4', 1789243200, uom=151)
 
         # Test SET_MODE - Auto (mode 1, ignores temp and hold)
         node.set_mode({'query': {'mode': '1', 'temp': '75', 'hold': '60'}})
@@ -343,7 +367,7 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertEqual(prop_map["GV1"]["name"], "Last 7 Days Energy")
         self.assertEqual(prop_map["GV2"]["name"], "Monthly Energy")
         self.assertEqual(prop_map["GV3"]["name"], "Yearly Energy")
-        self.assertEqual(prop_map["GV4"]["name"], "Hold Minutes")
+        self.assertEqual(prop_map["GV4"]["name"], "Hold End Time")
         self.assertEqual(prop_map["GV4"]["editor"], "HOLD_TIME")
         self.assertEqual(prop_map["GV5"]["name"], "Online")
         self.assertEqual(prop_map["GV5"]["editor"], "bool")

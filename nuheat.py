@@ -107,7 +107,7 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
         {
             "id": "HOLD_TIME",
             "ranges": [
-                {"uom": "45", "min": 0, "max": 1440, "step": 1, "prec": 0},
+                {"uom": "151", "min": 0, "max": 4294967295, "prec": 0},
                 {
                     "uom": "25",
                     "subset": "-2,-1",
@@ -116,6 +116,12 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
                         "-2": "Permanent Hold",
                     },
                 },
+            ],
+        },
+        {
+            "id": "HOLD_MINS",
+            "ranges": [
+                {"uom": "45", "min": 0, "max": 1440, "step": 1, "prec": 0}
             ],
         },
         {
@@ -165,7 +171,7 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
                 {"id": "GV1", "name": "Last 7 Days Energy", "editor": "TPW"},
                 {"id": "GV2", "name": "Monthly Energy", "editor": "TPW"},
                 {"id": "GV3", "name": "Yearly Energy", "editor": "TPW"},
-                {"id": "GV4", "name": "Hold Minutes", "editor": "HOLD_TIME"},
+                {"id": "GV4", "name": "Hold End Time", "editor": "HOLD_TIME"},
                 {"id": "GV5", "name": "Online", "editor": "bool"},
                 {"id": "TIME", "name": "Last Update", "editor": "timestamp"},
             ],
@@ -178,7 +184,7 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
                         "parameters": [
                             {"id": "mode", "name": "Mode", "editor": "MODE_SEL", "init": "CLIMD"},
                             {"id": "temp", "name": "Temperature", "editor": "CLITEMP", "init": "CLISPH"},
-                            {"id": "hold", "name": "Hold Minutes", "editor": "HOLD_TIME", "init": "GV4"},
+                            {"id": "hold", "name": "Hold Minutes", "editor": "HOLD_MINS"},
                         ],
                     },
                 ],
@@ -538,6 +544,8 @@ class Controller(BaseNode):
                     node.temp_uom = self.temp_uom
                     if hasattr(node, 'update_info'):
                         node.update_info()
+                    if hasattr(node, 'update_energy'):
+                        node.update_energy()
 
         self.update_oauth_config()
         self.handleCustomParamsDone = True
@@ -576,6 +584,7 @@ class Controller(BaseNode):
             if hasattr(self.Notices, 'delete'):
                 self.Notices.delete('auth')
             self.discover()
+            self.longPoll()
         else:
             LOGGER.warning("NuHeat is not authenticated. Please click 'Authenticate' in the PG3 dashboard.")
             if hasattr(self.Notices, '__setitem__'):
@@ -622,14 +631,18 @@ class Controller(BaseNode):
                         node.update_energy()
 
     def query(self, command=None):
+        LOGGER.info("Querying controller and all nodes...")
         self.setDriver('TIME', int(time.time()), uom=151)
         self.reportDrivers()
         get_nodes = getattr(self.poly, 'getNodes', None)
         nodes = get_nodes() if callable(get_nodes) else getattr(self, 'nodes', {})
         nodes_iterable = nodes.values() if isinstance(nodes, dict) else nodes
         for node in nodes_iterable:
-            if hasattr(node, 'reportDrivers'):
-                node.reportDrivers()
+            if getattr(node, 'address', None) != self.address:
+                if hasattr(node, 'query'):
+                    node.query()
+                elif hasattr(node, 'reportDrivers'):
+                    node.reportDrivers()
 
     def discover(self, *args, **kwargs):
         token = self.get_access_token()
@@ -652,7 +665,6 @@ class Controller(BaseNode):
                     self.temp_uom = 4
                 else:
                     self.temp_unit = "F"
-                    self.teThemp_uom = 17
                     self.temp_uom = 17
             else:
                 self.temp_unit = "F"
@@ -704,6 +716,11 @@ class Controller(BaseNode):
 
             stat_node = ThermostatNode(self.poly, stat_address, stat_address, name, self, temp_uom=self.temp_uom)
             add_node(stat_node)
+            try:
+                stat_node.update_info()
+                stat_node.update_energy()
+            except Exception as e:
+                LOGGER.error(f"Error updating thermostat {stat_address} on discovery: {e}")
 
             # Clean up any legacy energy child nodes from previous versions
             for child_addr in (energy_log_day_address, energy_log_week_address, energy_log_year_address):

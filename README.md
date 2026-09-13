@@ -50,8 +50,8 @@ In the PG3 dashboard under the NodeServer's **Configuration** tab, add the follo
 
 The thermostat uses a single consolidated command, **`SET_MODE`**, which accepts up to 3 parameters:
 - **Mode (`mode`)**:
-  - `1` = **Auto** (Follow internal schedule): Temperature and hold duration are ignored. Setpoint (`CLISPH`) and Hold Minutes (`GV4`) display as `Invalid` in the Admin Console.
-  - `2` = **Hold** (Temporary Hold): Sets target temperature (`temp`) and temporary hold duration in minutes (`hold`). The NodeServer automatically calculates the expiration timestamp and counts down remaining minutes on `GV4`.
+  - `1` = **Auto** (Follow internal schedule): Temperature and hold duration are ignored. Setpoint (`CLISPH`) and Hold End Time (`GV4`) display as `Invalid` in the Admin Console.
+  - `2` = **Hold** (Temporary Hold): Sets target temperature (`temp`) and temporary hold duration in minutes (`hold`). The NodeServer sets `GV4` to the hold expiration timestamp (Unix epoch timestamp, UOM 151).
   - `3` = **Permanent Hold** (Manual): Sets target temperature (`temp`) permanently until changed. Hold duration is ignored and `GV4` displays as `Permanent Hold`.
 - **Temperature (`temp`)**: Target heating setpoint in configured scale (°F or °C). Ignored in Auto mode.
 - **Hold Minutes (`hold`)**: Duration in minutes (0–1440) for temporary hold. Ignored in Auto and Permanent Hold modes.
@@ -71,10 +71,10 @@ The NodeServer automatically detects your account's preferred temperature scale 
     - **Update (`UPDATE`)**: Immediately forces an update across all nodes and queries fresh energy metrics (executes long poll).
 
 - **Thermostat Node (`°F` or `°C`)**:
-  - **Temperature & Setpoint**: Reports current temperature (`ST`) and target setpoint (`CLISPH` — displays `Invalid` [-1, UOM 25] in Auto mode).
+  - **Temperature & Setpoint**: Reports current temperature (`ST`) and target setpoint (`CLISPH` — displays `Invalid` in Auto mode).
   - **Operating Mode (`CLIMD`)**: Auto, Hold, or Permanent Hold.
   - **Heat State (`CLIHCS`)**: Idle or Heating.
-  - **Hold Minutes (`GV4`)**: Displays remaining hold duration in minutes when on Hold; displays `Permanent Hold` (-2, UOM 25) in Permanent Hold, and `Invalid` (-1, UOM 25) in Auto mode.
+  - **Hold End Time (`GV4`)**: Displays the hold expiration timestamp (Unix epoch timestamp, UOM 151) when on Hold; displays `Permanent Hold` in Permanent Hold mode, and `Invalid` in Auto mode.
   - **Online Status (`GV5`)**: Thermostat connection status (Online / Offline, UOM 2).
   - **Last Update (`TIME`)**: Unix epoch timestamp (UOM 151) of the last data refresh for this thermostat.
   - **Commands**:

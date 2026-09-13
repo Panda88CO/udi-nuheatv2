@@ -200,6 +200,49 @@ class TestNuHeatClient(unittest.TestCase):
             headers=client.headers
         )
 
+    @patch('requests.get')
+    def test_get_energy_summary_live_format(self, mock_get):
+        def mock_dispatch(url, headers=None):
+            resp = MagicMock()
+            resp.status_code = 200
+            if 'EnergyLog/Day/' in url:
+                resp.json.return_value = {
+                    'energyUsageType': 'Day',
+                    'energyUsage': [{'entry': str(i), 'minutes': 0, 'energyKWattHour': 0} for i in range(24)]
+                }
+            elif 'EnergyLog/Week/' in url:
+                resp.json.return_value = {
+                    'energyUsageType': 'Week',
+                    'energyUsage': [
+                        {'entry': '11', 'minutes': 0, 'energyKWattHour': 0},
+                        {'entry': '10', 'minutes': 0, 'energyKWattHour': 0},
+                        {'entry': '9', 'minutes': 0, 'energyKWattHour': 0},
+                        {'entry': '8', 'minutes': 0, 'energyKWattHour': 0.015},
+                        {'entry': '7', 'minutes': 0, 'energyKWattHour': 0.055},
+                        {'entry': '6', 'minutes': 0, 'energyKWattHour': 0.1116666}
+                    ]
+                }
+            elif 'EnergyLog/Month/' in url:
+                resp.json.return_value = {
+                    'energyUsageType': 'Month',
+                    'energyUsage': [
+                        {'entry': '12', 'minutes': 0, 'energyKWattHour': 0},
+                        {'entry': '9', 'minutes': 0, 'energyKWattHour': 1.381666},
+                        {'entry': '8', 'minutes': 0, 'energyKWattHour': 0.253333},
+                        {'entry': '1', 'minutes': 0, 'energyKWattHour': 0}
+                    ]
+                }
+            return resp
+
+        mock_get.side_effect = mock_dispatch
+
+        client = NuHeat('dummy')
+        summary = client.get_energy_summary('1262811', '2026-09-12', '2026', 9)
+        self.assertEqual(summary['day'], 0.0)
+        self.assertEqual(summary['week'], 0.18)
+        self.assertEqual(summary['month'], 1.38)
+        self.assertEqual(summary['year'], 1.63)
+
     def test_temperature_conversions(self):
         client = NuHeat('dummy')
         # 2000 hundredths C = 20.0 C -> 68.0 F
