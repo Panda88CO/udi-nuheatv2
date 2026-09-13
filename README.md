@@ -26,13 +26,15 @@ In the PG3 dashboard under the NodeServer's **Configuration** tab, add the follo
 
 | Key | Type | Description | Default |
 | :--- | :--- | :--- | :--- |
+| `clientId` | string | Your NuHeat OAuth Client ID (if not provided via PG3 OAuth setup) | *(none)* |
+| `clientSecret` | string | Your NuHeat OAuth Client Secret (if not provided via PG3 OAuth setup) | *(none)* |
 | `tz` | string | Your local tz database timezone name *(Required for energy logs)* | `America/New_York` |
 | `temp_unit` | string | Temperature unit: `F` for Fahrenheit or `C` for Celsius | `F` |
 
 *Refer to the [tz database time zones list](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) to find your timezone string (e.g., `America/New_York`, `America/Chicago`, `America/Denver`, `America/Los_Angeles`).*
 
 > [!NOTE]
-> `clientId` and `clientSecret` are managed directly via PG3's OAuth setup (similar to TeslaEVstream). They are not required in Custom Configuration Parameters.
+> `clientId` and `clientSecret` can be configured either via PG3's OAuth setup or entered in **Custom Configuration Parameters** (`clientId` and `clientSecret`).
 
 ---
 

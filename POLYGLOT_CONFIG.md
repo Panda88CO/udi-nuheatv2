@@ -11,13 +11,16 @@ In your PG3/PG3x NodeServer dashboard, configure the following keys under **Conf
 
 | Key | Type | Description | Default |
 | :--- | :--- | :--- | :--- |
+| `clientId` | string | Your NuHeat OAuth Client ID (if not provided via PG3 OAuth setup) | *(none)* |
+| `clientSecret` | string | Your NuHeat OAuth Client Secret (if not provided via PG3 OAuth setup) | *(none)* |
 | `tz` | string | Your local tz database timezone name (Required for accurate energy log timestamps) | `America/New_York` |
 | `temp_unit` | string | Temperature unit: `F` for Fahrenheit (UOM 17) or `C` for Celsius (UOM 4) | `F` |
 
 *A complete list of timezone names can be found in the [tz database time zones list](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) (e.g., `America/New_York`, `America/Chicago`, `America/Denver`, `America/Los_Angeles`).*
 
 > [!NOTE]
-> Client ID and Client Secret are managed directly in PG3's OAuth setup (similar to TeslaEVstream). They are not required as custom configuration parameters.
+> Client ID and Client Secret can be provided either via PG3's OAuth configuration setup or entered directly into **Custom Configuration Parameters** (`clientId` and `clientSecret`).
+
 
 ---
 

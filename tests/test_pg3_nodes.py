@@ -86,6 +86,40 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertEqual(controller.temp_unit, 'F')
         self.assertEqual(controller.temp_uom, 17)
 
+    def test_controller_init_preregisters_oauth_endpoints(self):
+        controller = Controller(self.mock_poly, 'controller', 'controller', 'NuHeat')
+        override = getattr(controller.oauth, '_oauthConfigOverride', {})
+        self.assertEqual(override.get('auth_endpoint'), 'https://identity.mynuheat.com/connect/authorize')
+        self.assertEqual(override.get('token_endpoint'), 'https://identity.mynuheat.com/connect/token')
+        self.assertEqual(override.get('name'), 'Nuheat')
+
+    def test_controller_custom_ns_handler_empty_oauth_avoids_spurious_errors(self):
+        controller = Controller(self.mock_poly, 'controller', 'controller', 'NuHeat')
+        controller.oauth.customNsHandler = MagicMock()
+        # With no credentials configured, calling with empty data should NOT pass empty data to self.oauth
+        controller.customNsHandler('oauth', {})
+        controller.oauth.customNsHandler.assert_not_called()
+        self.assertTrue(controller.customNsDone)
+
+    def test_controller_custom_ns_handler_with_credentials(self):
+        controller = Controller(self.mock_poly, 'controller', 'controller', 'NuHeat')
+        controller.oauth.customNsHandler = MagicMock()
+        controller.customNsHandler('oauth', {'client_id': 'test_id', 'client_secret': 'test_sec'})
+        self.assertEqual(controller.client_id, 'test_id')
+        self.assertEqual(controller.client_secret, 'test_sec')
+        self.assertTrue(controller.oauthReady)
+        controller.oauth.customNsHandler.assert_called_once_with('oauth', {'client_id': 'test_id', 'client_secret': 'test_sec'})
+
+    def test_controller_custom_params_handler_with_credentials(self):
+        controller = Controller(self.mock_poly, 'controller', 'controller', 'NuHeat')
+        controller.customParamsHandler({'clientId': 'cp_id', 'clientSecret': 'cp_sec'})
+        self.assertEqual(controller.client_id, 'cp_id')
+        self.assertEqual(controller.client_secret, 'cp_sec')
+        self.assertTrue(controller.oauthReady)
+        override = getattr(controller.oauth, '_oauthConfigOverride', {})
+        self.assertEqual(override.get('client_id'), 'cp_id')
+        self.assertEqual(override.get('client_secret'), 'cp_sec')
+
     def test_controller_discover(self):
         controller = Controller(self.mock_poly, 'controller', 'controller', 'NuHeat')
         controller.get_access_token = MagicMock(return_value='valid_token')
@@ -287,15 +321,15 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertEqual(len(clitemp_editor["ranges"]), 2)
         self.assertEqual(clitemp_editor["ranges"][0]["uom"], "17")
         self.assertEqual(clitemp_editor["ranges"][1]["uom"], "25")
-        self.assertEqual(clitemp_editor["ranges"][1]["subset"], "-1")
+        self.assertEqual(clitemp_editor["ranges"][1]["subset"], "-1, -2")
 
-        # Check CLITEMP editor ranges in C mode (only UOM 4 and UOM 25 subset -1)
+        # Check CLITEMP editor ranges in C mode (only UOM 4 and UOM 25 subset -1, -2)
         profile_c = _build_profile_definition("C")
         clitemp_c = next(e for e in profile_c["editors"] if e["id"] == "CLITEMP")
         self.assertEqual(len(clitemp_c["ranges"]), 2)
         self.assertEqual(clitemp_c["ranges"][0]["uom"], "4")
         self.assertEqual(clitemp_c["ranges"][1]["uom"], "25")
-        self.assertEqual(clitemp_c["ranges"][1]["subset"], "-1")
+        self.assertEqual(clitemp_c["ranges"][1]["subset"], "-1, -2")
 
         # Verify nodedefs include controller and THERMOSTAT
         nodedef_ids = {nd["id"] for nd in profile_f["nodedefs"]}

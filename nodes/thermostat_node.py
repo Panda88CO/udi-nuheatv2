@@ -310,10 +310,8 @@ class ThermostatNode(BaseNode):
             LOGGER.error(f"thermostat_node.setpoint_heat failed for {self.address}")
 
     commands = {
-        'QUERY': query,
         'SET_MODE': set_mode,
-        'CLISPH': setpoint_heat,
-        'CLIMD': set_mode_cmd
+
     }
 
 

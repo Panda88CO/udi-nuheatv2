@@ -205,6 +205,18 @@ class Controller(BaseNode):
         self.customParams = Custom(polyglot, 'customparams')
         self.Notices = getattr(polyglot, 'Notices', {})
         self.oauth = OAuth(polyglot)
+        # Pre-register NuHeat OAuth endpoints so they are never missing in udi_interface.OAuth
+        oauth_defaults = {
+            'name': 'Nuheat',
+            'auth_endpoint': 'https://identity.mynuheat.com/connect/authorize',
+            'token_endpoint': 'https://identity.mynuheat.com/connect/token',
+            'scope': 'openapi openid profile offline_access',
+            'addScope': True,
+            'addRedirect': True
+        }
+        if hasattr(self.oauth, 'updateOauthSettings'):
+            self.oauth.updateOauthSettings(oauth_defaults)
+
         self.NuHeat = NuHeat(token_or_provider=self.get_access_token)
         self.temperature_scale = None
         self.temp_unit = "F"
@@ -358,12 +370,13 @@ class Controller(BaseNode):
 
     def is_oauth_configured(self):
         oauth_cfg = getattr(self.oauth, '_oauthConfig', {})
-        client_id = self.client_id or (oauth_cfg.get('client_id') if hasattr(oauth_cfg, 'get') else None)
-        client_secret = self.client_secret or (oauth_cfg.get('client_secret') if hasattr(oauth_cfg, 'get') else None)
+        override = getattr(self.oauth, '_oauthConfigOverride', {})
+        client_id = self.client_id or (oauth_cfg.get('client_id') if hasattr(oauth_cfg, 'get') else None) or (override.get('client_id') if hasattr(override, 'get') else None)
+        client_secret = self.client_secret or (oauth_cfg.get('client_secret') if hasattr(oauth_cfg, 'get') else None) or (override.get('client_secret') if hasattr(override, 'get') else None)
         return bool(client_id and client_secret)
 
     def update_oauth_config(self):
-        """Optional fallback: updates OAuth settings if credentials were provided outside the PG3 OAuth setup."""
+        """Updates OAuth settings if credentials were provided in customParams, customNs, or controller attributes."""
         with self.oauth_lock:
             client_id = self.client_id or self.customParams.get('clientId') or self.customParams.get('client_id')
             client_secret = self.client_secret or self.customParams.get('clientSecret') or self.customParams.get('client_secret')
@@ -377,14 +390,18 @@ class Controller(BaseNode):
                     'client_secret': client_secret,
                     'auth_endpoint': 'https://identity.mynuheat.com/connect/authorize',
                     'token_endpoint': 'https://identity.mynuheat.com/connect/token',
-                    'scope': 'openapi openid offline_access',
+                    'scope': 'openapi openid profile offline_access',
                     'addScope': True,
                     'addRedirect': True
                 }
                 if hasattr(self.oauth, 'updateOauthSettings'):
                     self.oauth.updateOauthSettings(oauth_cfg)
-                elif hasattr(self.oauth, 'customNsHandler'):
-                    self.oauth.customNsHandler('oauth', oauth_cfg)
+                # If customNsHandler('oauth') hasn't initialized _oauthConfig, initialize it now
+                if hasattr(self.oauth, '_oauthConfigInitialized') and not self.oauth._oauthConfigInitialized:
+                    if hasattr(self.oauth, 'customNsHandler'):
+                        self.oauth.customNsHandler('oauth', {})
+                if hasattr(self.Notices, 'delete'):
+                    self.Notices.delete('oauth_creds')
 
     def customNsHandler(self, key, data):
         LOGGER.debug(f"customNsHandler called for {key}: {data}")
@@ -394,22 +411,48 @@ class Controller(BaseNode):
                 data = {}
 
             if key == 'oauth':
-                # Pass directly to udi_interface.OAuth - PG3 OAuth setup automatically populates _oauthConfig
-                if hasattr(self.oauth, 'customNsHandler'):
-                    self.oauth.customNsHandler(key, data)
+                # Check if credentials exist in customparams or controller attributes
+                self.update_oauth_config()
 
-                client_id = data.get('client_id') or data.get('clientId')
-                client_secret = data.get('client_secret') or data.get('clientSecret')
+                # Extract credentials if PG3 OAuth setup provided them in data
+                client_id = data.get('client_id') or data.get('clientId') or self.client_id
+                client_secret = data.get('client_secret') or data.get('clientSecret') or self.client_secret
                 if client_id:
                     self.client_id = client_id
                 if client_secret:
                     self.client_secret = client_secret
 
-                if self.is_oauth_configured():
-                    self.oauthReady = True
-                    LOGGER.debug("OAuth configuration automatically populated from PG3 OAuth setup")
-                else:
-                    LOGGER.info("OAuth configuration is pending credentials in PG3 OAuth setup.")
+                override = getattr(self.oauth, '_oauthConfigOverride', {})
+                has_client = bool(self.client_id or (isinstance(override, dict) and override.get('client_id')))
+                has_secret = bool(self.client_secret or (isinstance(override, dict) and override.get('client_secret')))
+
+                # If PG3 sends empty oauth data and no credentials have been configured yet,
+                # do not pass empty data to self.oauth to avoid spurious error logs from udi_interface
+                if not (has_client and has_secret):
+                    LOGGER.info("OAuth configuration is pending credentials in PG3 configuration.")
+                    self.customNsDone = True
+                    self.customNsHandlerDone = True
+                    return
+
+                # If credentials are present, update oauth override and delegate to udi_interface.OAuth
+                oauth_cfg = {
+                    'name': 'Nuheat',
+                    'client_id': self.client_id,
+                    'client_secret': self.client_secret,
+                    'auth_endpoint': 'https://identity.mynuheat.com/connect/authorize',
+                    'token_endpoint': 'https://identity.mynuheat.com/connect/token',
+                    'scope': 'openapi openid profile offline_access',
+                    'addScope': True,
+                    'addRedirect': True
+                }
+                if hasattr(self.oauth, 'updateOauthSettings'):
+                    self.oauth.updateOauthSettings(oauth_cfg)
+
+                if hasattr(self.oauth, 'customNsHandler'):
+                    self.oauth.customNsHandler(key, data)
+
+                self.oauthReady = True
+                LOGGER.debug("OAuth configuration automatically populated from PG3 OAuth setup")
 
             elif key == 'oauthTokens':
                 if hasattr(self.oauth, 'customNsHandler'):
@@ -496,6 +539,7 @@ class Controller(BaseNode):
                     if hasattr(node, 'update_info'):
                         node.update_info()
 
+        self.update_oauth_config()
         self.handleCustomParamsDone = True
         self.customParam_done = True
         LOGGER.debug(f"customParamsHandler finished: tz={self.tz}, temp_unit={self.temp_unit} (uom {self.temp_uom})")
@@ -518,6 +562,14 @@ class Controller(BaseNode):
         self.setDriver('ST', 1, uom=2)
         self.setDriver('TIME', int(time.time()), uom=151)
         self._publish_profile()
+
+        if not self.is_oauth_configured():
+            LOGGER.warning("NuHeat OAuth credentials (clientId & clientSecret) are missing. Please configure them in PG3.")
+            if hasattr(self.Notices, '__setitem__'):
+                self.Notices['oauth_creds'] = "OAuth credentials required: Please configure 'clientId' and 'clientSecret' in Custom Configuration Parameters."
+        else:
+            if hasattr(self.Notices, 'delete'):
+                self.Notices.delete('oauth_creds')
 
         token = self.get_access_token()
         if token:
