@@ -11,8 +11,6 @@ In your PG3/PG3x NodeServer dashboard, configure the following keys under **Conf
 
 | Key | Type | Description | Default |
 | :--- | :--- | :--- | :--- |
-| `clientId` | string | Your NuHeat OAuth Client ID (if not provided via PG3 OAuth setup) | *(none)* |
-| `clientSecret` | string | Your NuHeat OAuth Client Secret (if not provided via PG3 OAuth setup) | *(none)* |
 | `tz` | string | Your local tz database timezone name (Required for accurate energy log timestamps) | `America/New_York` |
 | `temp_unit` | string | Temperature unit: `F` for Fahrenheit (UOM 17) or `C` for Celsius (UOM 4) | `F` |
 
