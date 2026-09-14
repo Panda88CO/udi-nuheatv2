@@ -16,6 +16,7 @@ class NuHeat:
         self.api_v1_url = "https://api.mynuheat.com/api/v1"
         self.api_url = self.api_v2_url
         self._month_cache = {}
+        self.timeout = 10
 
         if callable(token_or_provider):
             self._token_provider = token_or_provider
@@ -32,6 +33,44 @@ class NuHeat:
 
     def set_access_token(self, token):
         self._token_provider = lambda: str(token) if token else ""
+
+    def _request(self, method: str, url: str, max_retries: int = 2, backoff: float = 2.0, **kwargs):
+        """
+        Executes HTTP requests with timeout, logging, and automatic retry for
+        transient server errors (5xx, timeouts, connection drops).
+        """
+        kwargs.setdefault('headers', self.headers)
+        kwargs.setdefault('timeout', self.timeout)
+
+        last_resp = None
+        for attempt in range(max_retries + 1):
+            try:
+                r = requests.request(method, url, **kwargs)
+                self._log_response(method, url, r)
+                # If server returns 5xx (transient error / server down) and attempts remain, retry
+                if r.status_code >= 500 and attempt < max_retries:
+                    LOGGER.warning(
+                        f"NuHeat API [{method}] {url} returned {r.status_code}. "
+                        f"Retrying in {backoff}s (attempt {attempt + 1}/{max_retries})..."
+                    )
+                    time.sleep(backoff)
+                    continue
+                return r
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as exc:
+                if attempt < max_retries:
+                    LOGGER.warning(
+                        f"NuHeat API [{method}] {url} failed with {exc.__class__.__name__}. "
+                        f"Retrying in {backoff}s (attempt {attempt + 1}/{max_retries})..."
+                    )
+                    time.sleep(backoff)
+                else:
+                    LOGGER.error(f"NuHeat API [{method}] {url} failed after {max_retries + 1} attempts: {exc}")
+                    raise
+            except requests.exceptions.RequestException as exc:
+                LOGGER.error(f"NuHeat API [{method}] {url} request error: {exc}")
+                raise
+
+        return last_resp
 
     def _log_response(self, method: str, url: str, r: requests.Response):
         """Log HTTP response details and nicely formatted JSON using LOGGER.debug."""
