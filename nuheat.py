@@ -6,7 +6,7 @@ import threading
 
 from nodes.base import LOGGER, BaseNode
 
-VERSION = "2.1.5"
+VERSION = "2.1.6"
 
 try:
     import udi_interface
@@ -178,13 +178,20 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
             "cmds": {
                 "accepts": [
                     {"id": "UPDATE", "name": "Force Update"},
+                    {"id": "SET_AUTO", "name": "Set Auto"},
                     {
-                        "id": "SET_MODE",
-                        "name": "Set Mode",
+                        "id": "SET_HOLD",
+                        "name": "Set Hold",
                         "parameters": [
-                            {"id": "mode", "name": "Mode", "editor": "MODE_SEL", "init": "CLIMD"},
                             {"id": "temp", "name": "Temperature", "editor": "CLITEMP", "init": "CLISPH"},
                             {"id": "hold", "name": "Hold Minutes", "editor": "HOLD_MINS"},
+                        ],
+                    },
+                    {
+                        "id": "SET_PERM_HOLD",
+                        "name": "Set Permanent Hold",
+                        "parameters": [
+                            {"id": "temp", "name": "Temperature", "editor": "CLITEMP", "init": "CLISPH"},
                         ],
                     },
                 ],

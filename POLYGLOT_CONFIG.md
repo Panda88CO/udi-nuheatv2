@@ -35,13 +35,13 @@ In your PG3/PG3x NodeServer dashboard, configure the following keys under **Conf
 
 ## 3. Operating Mode & Setpoint Control
  
-The thermostat uses a single consolidated command, **`SET_MODE`**, with up to 3 parameters:
-- **Mode (`mode`)**:
-  - `1` = **Auto**: Follows internal schedule. Temperature and hold minutes are ignored. Setpoint (`CLISPH`) and Hold End Time (`GV4`) display as `Schedule`.
-  - `2` = **Hold**: Temporary hold using target `temp` and `hold` duration in minutes. Sets `GV4` to the hold expiration timestamp (Unix epoch timestamp, UOM 151).
-  - `3` = **Permanent Hold**: Manual hold using target `temp` indefinitely. Hold minutes is ignored and `GV4` displays as `Permanent Hold`.
-- **Temperature (`temp`)**: Target setpoint in °F or °C (ignored in Auto).
-- **Hold Minutes (`hold`)**: Duration in minutes 0–1440 (ignored in Auto and Permanent Hold).
+The thermostat uses 3 dedicated commands to control operating mode and heating setpoint:
+- **Set Auto (`SET_AUTO`)**: Follows internal schedule. Takes no parameters. Setpoint (`CLISPH`) and Hold End Time (`GV4`) display as `Schedule`.
+- **Set Hold (`SET_HOLD`)**: Temporary hold with 2 parameters:
+  - **Temperature (`temp`)**: Target heating setpoint in °F or °C.
+  - **Hold Minutes (`hold`)**: Duration in minutes (0–1440). Sets `GV4` to the hold expiration timestamp (Unix epoch timestamp, UOM 151).
+- **Set Permanent Hold (`SET_PERM_HOLD`)**: Manual hold with 1 parameter:
+  - **Temperature (`temp`)**: Target heating setpoint in °F or °C indefinitely. `GV4` displays as `Permanent Hold`.
 
 ---
 
@@ -70,5 +70,7 @@ For each thermostat discovered on your account, a single unified primary node is
      - Monthly Energy (`GV2` — kWh, UOM 33)
      - Yearly Energy (`GV3` — kWh, UOM 33)
    - **Commands**:
-     - **Set Mode (`SET_MODE`)**: Interactive GUI command with inputs for Mode (Auto, Hold, Permanent Hold), Temperature, and Hold Minutes.
+     - **Set Auto (`SET_AUTO`)**: Sets thermostat to follow internal schedule.
+     - **Set Hold (`SET_HOLD`)**: Sets temporary hold with target temperature and hold duration in minutes.
+     - **Set Permanent Hold (`SET_PERM_HOLD`)**: Sets permanent manual hold with target temperature.
      - **Force Update (`UPDATE`)**: Immediately force updates thermostat status.

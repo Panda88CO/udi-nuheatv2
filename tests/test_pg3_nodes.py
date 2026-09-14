@@ -215,15 +215,15 @@ class TestPG3Nodes(unittest.TestCase):
         node.setDriver.assert_any_call('GV4', 0, uom=25)
         node.setDriver.assert_any_call('GV5', 1, uom=2)
 
-        # Test SET_MODE - Permanent Hold (mode 3, ignores hold)
-        node.set_mode({'query': {'mode': '3', 'temp': '72', 'hold': '120'}})
+        # Test SET_PERM_HOLD - Permanent Hold (takes temp)
+        node.set_permanent_hold({'query': {'temp': '72'}})
         controller.NuHeat.set_mode_manual.assert_called_once_with('99887766', 2222)
         node.setDriver.assert_any_call('CLIMD', 3, uom=25)
         node.setDriver.assert_any_call('CLISPH', 72.0, uom=17)
         node.setDriver.assert_any_call('GV4', 1, uom=25)
 
-        # Test SET_MODE - Temporary Hold (mode 2, calculates stop time as unix timestamp)
-        node.set_mode({'query': {'mode.uom25': '2', 'temp.uom17': '70', 'hold.uom45': '90'}})
+        # Test SET_HOLD - Temporary Hold (takes temp and hold duration in minutes)
+        node.set_hold({'query': {'temp.uom17': '70', 'hold.uom45': '90'}})
         self.assertEqual(controller.NuHeat.set_mode_hold.call_count, 1)
         call_args = controller.NuHeat.set_mode_hold.call_args[0]
         self.assertEqual(call_args[0], '99887766')
@@ -248,8 +248,8 @@ class TestPG3Nodes(unittest.TestCase):
         node.update_info()
         node.setDriver.assert_any_call('GV4', 1789243200, uom=151)
 
-        # Test SET_MODE - Auto (mode 1, ignores temp and hold)
-        node.set_mode({'query': {'mode': '1', 'temp': '75', 'hold': '60'}})
+        # Test SET_AUTO - Auto (takes no parameters)
+        node.set_auto()
         controller.NuHeat.set_mode_auto.assert_called_once_with('99887766')
         node.setDriver.assert_any_call('CLIMD', 1, uom=25)
         node.setDriver.assert_any_call('CLISPH', 0, uom=25)
@@ -272,7 +272,12 @@ class TestPG3Nodes(unittest.TestCase):
         node.reportDrivers = MagicMock()
         node.force_update()
         node.reportDrivers.assert_called_once()
-        self.assertEqual(node.commands, {'SET_MODE': ThermostatNode.set_mode, 'UPDATE': ThermostatNode.force_update})
+        self.assertEqual(node.commands, {
+            'UPDATE': ThermostatNode.force_update,
+            'SET_AUTO': ThermostatNode.set_auto,
+            'SET_HOLD': ThermostatNode.set_hold,
+            'SET_PERM_HOLD': ThermostatNode.set_permanent_hold,
+        })
 
     def test_thermostat_node_c(self):
         controller = MagicMock()
@@ -384,11 +389,24 @@ class TestPG3Nodes(unittest.TestCase):
 
         # Verify accepts commands use 'parameters' key
         cmd_map = {c["id"]: c for c in thermostat_def["cmds"]["accepts"]}
-        self.assertIn("SET_MODE", cmd_map)
-        self.assertIn("parameters", cmd_map["SET_MODE"])
-        self.assertEqual(len(cmd_map["SET_MODE"]["parameters"]), 3)
+        self.assertIn("UPDATE", cmd_map)
+        self.assertIn("SET_AUTO", cmd_map)
+        self.assertIn("SET_HOLD", cmd_map)
+        self.assertIn("SET_PERM_HOLD", cmd_map)
+        self.assertNotIn("SET_MODE", cmd_map)
         self.assertNotIn("CLISPH", cmd_map)
         self.assertNotIn("CLIMD", cmd_map)
+
+        self.assertIn("parameters", cmd_map["SET_HOLD"])
+        self.assertEqual(len(cmd_map["SET_HOLD"]["parameters"]), 2)
+        self.assertEqual(cmd_map["SET_HOLD"]["parameters"][0]["id"], "temp")
+        self.assertEqual(cmd_map["SET_HOLD"]["parameters"][1]["id"], "hold")
+
+        self.assertIn("parameters", cmd_map["SET_PERM_HOLD"])
+        self.assertEqual(len(cmd_map["SET_PERM_HOLD"]["parameters"]), 1)
+        self.assertEqual(cmd_map["SET_PERM_HOLD"]["parameters"][0]["id"], "temp")
+
+        self.assertNotIn("parameters", cmd_map["SET_AUTO"])
 
         # Verify controller sends DON and DOF
         # Verify controller accepts UPDATE and sends DON and DOF

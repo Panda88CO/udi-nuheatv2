@@ -179,112 +179,124 @@ class ThermostatNode(BaseNode):
         self.update_energy(force=True)
         self.reportDrivers()
 
-    def set_mode(self, command):
-        LOGGER.info(f"ThermostatNode.set_mode called for {self.address} with {command}")
+    def set_auto(self, command=None):
+        """Set thermostat to Auto mode (Follow Schedule). Takes no parameters."""
+        LOGGER.info(f"ThermostatNode.set_auto called for {self.address}")
         nuheat_client = getattr(self.controller, 'NuHeat', None)
         if nuheat_client is None:
             LOGGER.error("NuHeat client not available on controller")
-            return
+            return False
 
-        raw_mode = _get_param(command, "mode", command.get("value", 1) if isinstance(command, dict) else 1)
-        try:
-            mode = int(raw_mode)
-        except (TypeError, ValueError):
-            mode = 1
+        ok = nuheat_client.set_mode_auto(self.address)
+        if ok:
+            self.setDriver('CLIMD', 1, uom=25)
+            self.setDriver('CLISPH', 0, uom=25)
+            self.setDriver('GV4', 0, uom=25)
+            self.setDriver('TIME', int(time.time()), uom=151)
+            return True
+        else:
+            LOGGER.error(f"set_mode_auto failed for {self.address}")
+            return False
 
-        raw_temp = _get_param(command, "temp")
+    def set_permanent_hold(self, command=None):
+        """Set thermostat to Permanent Hold (Manual). Takes target temperature."""
+        LOGGER.info(f"ThermostatNode.set_permanent_hold called for {self.address} with {command}")
+        nuheat_client = getattr(self.controller, 'NuHeat', None)
+        if nuheat_client is None:
+            LOGGER.error("NuHeat client not available on controller")
+            return False
+
+        raw_temp = _get_param(command, "temp", command.get("value") if isinstance(command, dict) else None)
+        if raw_temp is not None:
+            try:
+                temp = float(raw_temp)
+            except (TypeError, ValueError):
+                temp = 72 if self.temp_uom == 17 else 22
+        else:
+            curr_sp = self.getDriver('CLISPH')
+            curr_val = curr_sp.get('value') if isinstance(curr_sp, dict) else None
+            try:
+                temp = float(curr_val) if curr_val not in (None, 97, '97', -1, '-1', 0, '0') else (72 if self.temp_uom == 17 else 22)
+            except (TypeError, ValueError):
+                temp = 72 if self.temp_uom == 17 else 22
+
+        if self.temp_uom == 17:
+            new_setpoint = nuheat_client.nuheat_fahrenheit_to_celsius_json(temp)
+        else:
+            new_setpoint = nuheat_client.nuheat_celsius_to_json(temp)
+
+        ok = nuheat_client.set_mode_manual(self.address, new_setpoint)
+        if ok:
+            self.setDriver('CLIMD', 3, uom=25)
+            self.setDriver('CLISPH', temp, uom=self.temp_uom)
+            self.setDriver('GV4', 1, uom=25)
+            self.setDriver('TIME', int(time.time()), uom=151)
+            return True
+        else:
+            LOGGER.error(f"set_mode_manual failed for {self.address}")
+            return False
+
+    def set_hold(self, command=None):
+        """Set thermostat to Temporary Hold. Takes target temperature and hold duration in minutes."""
+        LOGGER.info(f"ThermostatNode.set_hold called for {self.address} with {command}")
+        nuheat_client = getattr(self.controller, 'NuHeat', None)
+        if nuheat_client is None:
+            LOGGER.error("NuHeat client not available on controller")
+            return False
+
+        raw_temp = _get_param(command, "temp", command.get("value") if isinstance(command, dict) else None)
         raw_hold = _get_param(command, "hold")
 
-        if mode == 1:
-            # Auto (Follow Schedule) - ignore temp and hold time
-            ok = nuheat_client.set_mode_auto(self.address)
-            if ok:
-                self.setDriver('CLIMD', 1, uom=25)
-                self.setDriver('CLISPH', 0, uom=25)
-                self.setDriver('GV4', 0, uom=25)
-                self.setDriver('TIME', int(time.time()), uom=151)
-            else:
-                LOGGER.error(f"set_mode_auto failed for {self.address}")
-
-        elif mode == 3:
-            # Permanent Hold (Manual) - ignore hold time
-            if raw_temp is not None:
-                try:
-                    temp = float(raw_temp)
-                except (TypeError, ValueError):
-                    temp = 72 if self.temp_uom == 17 else 22
-            else:
-                curr_sp = self.getDriver('CLISPH')
-                curr_val = curr_sp.get('value') if isinstance(curr_sp, dict) else None
-                try:
-                    temp = float(curr_val) if curr_val not in (None, 97, '97', -1, '-1', 0, '0') else (72 if self.temp_uom == 17 else 22)
-                except (TypeError, ValueError):
-                    temp = 72 if self.temp_uom == 17 else 22
-
-            if self.temp_uom == 17:
-                new_setpoint = nuheat_client.nuheat_fahrenheit_to_celsius_json(temp)
-            else:
-                new_setpoint = nuheat_client.nuheat_celsius_to_json(temp)
-
-            ok = nuheat_client.set_mode_manual(self.address, new_setpoint)
-            if ok:
-                self.setDriver('CLIMD', 3, uom=25)
-                self.setDriver('CLISPH', temp, uom=self.temp_uom)
-                self.setDriver('GV4', 1, uom=25)
-                self.setDriver('TIME', int(time.time()), uom=151)
-            else:
-                LOGGER.error(f"set_mode_manual failed for {self.address}")
-
-        elif mode == 2:
-            # Temporary Hold - uses temp and hold time in minutes
-            if raw_temp is not None:
-                try:
-                    temp = float(raw_temp)
-                except (TypeError, ValueError):
-                    temp = 72 if self.temp_uom == 17 else 22
-            else:
-                curr_sp = self.getDriver('CLISPH')
-                curr_val = curr_sp.get('value') if isinstance(curr_sp, dict) else None
-                try:
-                    temp = float(curr_val) if curr_val not in (None, 97, '97', -1, '-1', 0, '0') else (72 if self.temp_uom == 17 else 22)
-                except (TypeError, ValueError):
-                    temp = 72 if self.temp_uom == 17 else 22
-
+        if raw_temp is not None:
             try:
-                hold_val = int(raw_hold) if raw_hold is not None else 60
+                temp = float(raw_temp)
             except (TypeError, ValueError):
-                hold_val = 60
-
-            now_utc = datetime.now(timezone.utc)
-            if hold_val > 100000:
-                stop_utc = datetime.fromtimestamp(hold_val, timezone.utc)
-            else:
-                if hold_val <= 0:
-                    hold_val = 60
-                stop_utc = now_utc + timedelta(minutes=hold_val)
-
-            hold_until_str = stop_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
-            hold_end_ts = int(stop_utc.timestamp())
-
-            if self.temp_uom == 17:
-                new_setpoint = nuheat_client.nuheat_fahrenheit_to_celsius_json(temp)
-            else:
-                new_setpoint = nuheat_client.nuheat_celsius_to_json(temp)
-
-            ok = nuheat_client.set_mode_hold(self.address, new_setpoint, hold_until=hold_until_str)
-            if ok:
-                self.setDriver('CLIMD', 2, uom=25)
-                self.setDriver('CLISPH', temp, uom=self.temp_uom)
-                self.setDriver('GV4', hold_end_ts, uom=151)
-                self.setDriver('TIME', int(time.time()), uom=151)
-            else:
-                LOGGER.error(f"set_mode_hold failed for {self.address}")
+                temp = 72 if self.temp_uom == 17 else 22
         else:
-            LOGGER.error(f"Unknown mode {mode} for thermostat {self.address}")
+            curr_sp = self.getDriver('CLISPH')
+            curr_val = curr_sp.get('value') if isinstance(curr_sp, dict) else None
+            try:
+                temp = float(curr_val) if curr_val not in (None, 97, '97', -1, '-1', 0, '0') else (72 if self.temp_uom == 17 else 22)
+            except (TypeError, ValueError):
+                temp = 72 if self.temp_uom == 17 else 22
+
+        try:
+            hold_val = int(raw_hold) if raw_hold is not None else 60
+        except (TypeError, ValueError):
+            hold_val = 60
+
+        now_utc = datetime.now(timezone.utc)
+        if hold_val > 100000:
+            stop_utc = datetime.fromtimestamp(hold_val, timezone.utc)
+        else:
+            if hold_val <= 0:
+                hold_val = 60
+            stop_utc = now_utc + timedelta(minutes=hold_val)
+
+        hold_until_str = stop_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
+        hold_end_ts = int(stop_utc.timestamp())
+
+        if self.temp_uom == 17:
+            new_setpoint = nuheat_client.nuheat_fahrenheit_to_celsius_json(temp)
+        else:
+            new_setpoint = nuheat_client.nuheat_celsius_to_json(temp)
+
+        ok = nuheat_client.set_mode_hold(self.address, new_setpoint, hold_until=hold_until_str)
+        if ok:
+            self.setDriver('CLIMD', 2, uom=25)
+            self.setDriver('CLISPH', temp, uom=self.temp_uom)
+            self.setDriver('GV4', hold_end_ts, uom=151)
+            self.setDriver('TIME', int(time.time()), uom=151)
+            return True
+        else:
+            LOGGER.error(f"set_mode_hold failed for {self.address}")
+            return False
 
     commands = {
-        'SET_MODE': set_mode,
         'UPDATE': force_update,
+        'SET_AUTO': set_auto,
+        'SET_HOLD': set_hold,
+        'SET_PERM_HOLD': set_permanent_hold,
     }
 
 

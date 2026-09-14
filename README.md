@@ -48,13 +48,13 @@ In the PG3 dashboard under the NodeServer's **Configuration** tab, add the follo
 
 ## Setting Operating Mode & Setpoint
 
-The thermostat uses a single consolidated command, **`SET_MODE`**, which accepts up to 3 parameters:
-- **Mode (`mode`)**:
-  - `1` = **Auto** (Follow internal schedule): Temperature and hold duration are ignored. Setpoint (`CLISPH`) and Hold End Time (`GV4`) display as `Invalid` in the Admin Console.
-  - `2` = **Hold** (Temporary Hold): Sets target temperature (`temp`) and temporary hold duration in minutes (`hold`). The NodeServer sets `GV4` to the hold expiration timestamp (Unix epoch timestamp, UOM 151).
-  - `3` = **Permanent Hold** (Manual): Sets target temperature (`temp`) permanently until changed. Hold duration is ignored and `GV4` displays as `Permanent Hold`.
-- **Temperature (`temp`)**: Target heating setpoint in configured scale (°F or °C). Ignored in Auto mode.
-- **Hold Minutes (`hold`)**: Duration in minutes (0–1440) for temporary hold. Ignored in Auto and Permanent Hold modes.
+The thermostat uses 3 dedicated commands to control operating mode and heating setpoint:
+- **Set Auto (`SET_AUTO`)**: Follows internal schedule. Takes no parameters. Setpoint (`CLISPH`) and Hold End Time (`GV4`) display as `Schedule`.
+- **Set Hold (`SET_HOLD`)**: Temporary hold with 2 parameters:
+  - **Temperature (`temp`)**: Target heating setpoint in configured scale (°F or °C).
+  - **Hold Minutes (`hold`)**: Duration in minutes (0–1440). Sets `GV4` to the hold expiration timestamp (Unix epoch timestamp, UOM 151).
+- **Set Permanent Hold (`SET_PERM_HOLD`)**: Manual hold with 1 parameter:
+  - **Temperature (`temp`)**: Target heating setpoint in configured scale (°F or °C) permanently until changed. `GV4` displays as `Permanent Hold`.
 
 ---
 
@@ -78,7 +78,9 @@ The NodeServer automatically detects your account's preferred temperature scale 
   - **Online Status (`GV5`)**: Thermostat connection status (Online / Offline, UOM 2).
   - **Last Update (`TIME`)**: Unix epoch timestamp (UOM 151) of the last data refresh for this thermostat.
   - **Commands**:
-    - **Set Mode (`SET_MODE`)**: Interactive GUI command with inputs for Mode (Auto, Hold, Permanent Hold), Temperature, and Hold Minutes.
+    - **Set Auto (`SET_AUTO`)**: Sets thermostat to follow internal schedule.
+    - **Set Hold (`SET_HOLD`)**: Sets temporary hold with target temperature and hold duration in minutes.
+    - **Set Permanent Hold (`SET_PERM_HOLD`)**: Sets permanent manual hold with target temperature.
     - **Force Update (`UPDATE`)**: Immediately forces a data update for this thermostat.
   - **Energy Metrics (UOM 33 / kWh)**:
     - **Daily Energy** (`GV0`): Energy used today in kWh.
