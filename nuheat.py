@@ -67,10 +67,16 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
             {"uom": "4", "min": 5, "max": 40, "step": 1, "prec": 0},
             {"uom": "25", "subset": "0,1", "names": {"0": "Schedule", "1": "Permanent Hold"}},
         ]
+        clitemp_range_input = [
+            {"uom": "4", "min": 5, "max": 40, "step": 1, "prec": 0},
+        ]
     else:
         clitemp_ranges = [
             {"uom": "17", "min": 41, "max": 104, "step": 1, "prec": 0},
             {"uom": "25", "subset": "0,1", "names": {"0": "Schedule", "1": "Permanent Hold"}},
+        ]
+        clitemp_range_input = [
+            {"uom": "17", "min": 41, "max": 104, "step": 1, "prec": 0},
         ]
 
     editors = [
@@ -103,6 +109,14 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
         {
             "id": "CLITEMP",
             "ranges": clitemp_ranges,
+        },
+        {
+            "id": "clitemp_range_input",
+            "ranges": clitemp_range_input,
+        },
+        {
+            "id": "CLITEMP_INPUT",
+            "ranges": clitemp_range_input,
         },
         {
             "id": "HOLD_TIME",
@@ -183,7 +197,7 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
                         "id": "SET_HOLD",
                         "name": "Set Hold",
                         "parameters": [
-                            {"id": "temp", "name": "Temperature", "editor": "CLITEMP", "init": "CLISPH"},
+                            {"id": "temp", "name": "Temperature", "editor": "clitemp_range_input", "init": "CLISPH"},
                             {"id": "hold", "name": "Hold Minutes", "editor": "HOLD_MINS"},
                         ],
                     },
@@ -191,7 +205,7 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
                         "id": "SET_PERM_HOLD",
                         "name": "Set Permanent Hold",
                         "parameters": [
-                            {"id": "temp", "name": "Temperature", "editor": "CLITEMP", "init": "CLISPH"},
+                            {"id": "temp", "name": "Temperature", "editor": "clitemp_range_input", "init": "CLISPH"},
                         ],
                     },
                 ],

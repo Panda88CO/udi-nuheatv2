@@ -361,6 +361,13 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertEqual(clitemp_editor["ranges"][1]["subset"], "0,1")
         self.assertEqual(clitemp_editor["ranges"][1]["names"], {"0": "Schedule", "1": "Permanent Hold"})
 
+        # Check clitemp_range_input in F mode (only UOM 17, no UOM 25)
+        input_editor_f = next(e for e in profile_f["editors"] if e["id"] == "clitemp_range_input")
+        self.assertEqual(len(input_editor_f["ranges"]), 1)
+        self.assertEqual(input_editor_f["ranges"][0]["uom"], "17")
+        self.assertEqual(input_editor_f["ranges"][0]["min"], 41)
+        self.assertEqual(input_editor_f["ranges"][0]["max"], 104)
+
         # Check CLITEMP editor ranges in C mode (only UOM 4 and UOM 25 subset 0,1)
         profile_c = _build_profile_definition("C")
         clitemp_c = next(e for e in profile_c["editors"] if e["id"] == "CLITEMP")
@@ -369,6 +376,13 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertEqual(clitemp_c["ranges"][1]["uom"], "25")
         self.assertEqual(clitemp_c["ranges"][1]["subset"], "0,1")
         self.assertEqual(clitemp_c["ranges"][1]["names"], {"0": "Schedule", "1": "Permanent Hold"})
+
+        # Check clitemp_range_input in C mode (only UOM 4, no UOM 25)
+        input_editor_c = next(e for e in profile_c["editors"] if e["id"] == "clitemp_range_input")
+        self.assertEqual(len(input_editor_c["ranges"]), 1)
+        self.assertEqual(input_editor_c["ranges"][0]["uom"], "4")
+        self.assertEqual(input_editor_c["ranges"][0]["min"], 5)
+        self.assertEqual(input_editor_c["ranges"][0]["max"], 40)
 
         # Verify nodedefs include controller and THERMOSTAT
         nodedef_ids = {nd["id"] for nd in profile_f["nodedefs"]}
@@ -400,11 +414,13 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertIn("parameters", cmd_map["SET_HOLD"])
         self.assertEqual(len(cmd_map["SET_HOLD"]["parameters"]), 2)
         self.assertEqual(cmd_map["SET_HOLD"]["parameters"][0]["id"], "temp")
+        self.assertEqual(cmd_map["SET_HOLD"]["parameters"][0]["editor"], "clitemp_range_input")
         self.assertEqual(cmd_map["SET_HOLD"]["parameters"][1]["id"], "hold")
 
         self.assertIn("parameters", cmd_map["SET_PERM_HOLD"])
         self.assertEqual(len(cmd_map["SET_PERM_HOLD"]["parameters"]), 1)
         self.assertEqual(cmd_map["SET_PERM_HOLD"]["parameters"][0]["id"], "temp")
+        self.assertEqual(cmd_map["SET_PERM_HOLD"]["parameters"][0]["editor"], "clitemp_range_input")
 
         self.assertNotIn("parameters", cmd_map["SET_AUTO"])
 
