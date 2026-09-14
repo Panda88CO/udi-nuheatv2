@@ -71,4 +71,4 @@ For each thermostat discovered on your account, a single unified primary node is
      - Yearly Energy (`GV3` — kWh, UOM 33)
    - **Commands**:
      - **Set Mode (`SET_MODE`)**: Interactive GUI command with inputs for Mode (Auto, Hold, Permanent Hold), Temperature, and Hold Minutes.
-     - **Query (`QUERY`)**: Query thermostat status.
+     - **Force Update (`UPDATE`)**: Immediately force updates thermostat status.

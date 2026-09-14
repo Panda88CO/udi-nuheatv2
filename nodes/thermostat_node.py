@@ -173,8 +173,8 @@ class ThermostatNode(BaseNode):
             f"Monthly (GV2): {month_val} kWh, Yearly (GV3): {year_val} kWh"
         )
 
-    def query(self, command=None):
-        LOGGER.info(f"Querying thermostat {self.address} ({self.name})...")
+    def force_update(self, command=None):
+        LOGGER.info(f"Updating thermostat {self.address} ({self.name})...")
         self.update_info()
         self.update_energy(force=True)
         self.reportDrivers()
@@ -282,52 +282,9 @@ class ThermostatNode(BaseNode):
         else:
             LOGGER.error(f"Unknown mode {mode} for thermostat {self.address}")
 
-    def set_mode_cmd(self, command):
-        """Direct CLIMD command handler from programs or Admin Console."""
-        return self.set_mode(command)
-
-    def setpoint_heat(self, command):
-        """Direct CLISPH command handler."""
-        nuheat_client = getattr(self.controller, 'NuHeat', None)
-        if nuheat_client is None:
-            LOGGER.error("NuHeat client not available on controller")
-            return
-
-        raw_val = _get_param(command, "temp", command.get('value') if isinstance(command, dict) else None)
-        if raw_val is None:
-            LOGGER.error(f"setpoint_heat: No temperature value provided in {command}")
-            return
-        try:
-            val = float(raw_val)
-        except (TypeError, ValueError):
-            LOGGER.error(f"setpoint_heat: Invalid temperature value {raw_val}")
-            return
-
-        if self.temp_uom == 17:
-            new_setpoint = nuheat_client.nuheat_fahrenheit_to_celsius_json(val)
-        else:
-            new_setpoint = nuheat_client.nuheat_celsius_to_json(val)
-
-        # Check current mode: if in auto, move to manual; if in hold, maintain hold
-        curr_mode = self.getDriver('CLIMD')
-        mode_val = curr_mode.get('value') if isinstance(curr_mode, dict) else 3
-        if mode_val == 2:
-            _status = nuheat_client.set_mode_hold(self.address, new_setpoint)
-        else:
-            _status = nuheat_client.set_mode_manual(self.address, new_setpoint)
-
-        if _status is not None:
-            self.setDriver('CLISPH', val, uom=self.temp_uom)
-            if mode_val == 1:
-                self.setDriver('CLIMD', 3, uom=25)
-                self.setDriver('GV4', 1, uom=25)
-            self.setDriver('TIME', int(time.time()), uom=151)
-        else:
-            LOGGER.error(f"thermostat_node.setpoint_heat failed for {self.address}")
-
     commands = {
         'SET_MODE': set_mode,
-        'UPDATE': update_info,
+        'UPDATE': force_update,
     }
 
 

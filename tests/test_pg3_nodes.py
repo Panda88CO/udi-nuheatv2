@@ -268,6 +268,12 @@ class TestPG3Nodes(unittest.TestCase):
         node.setDriver.assert_any_call('GV2', 35.50, uom=33)
         node.setDriver.assert_any_call('GV3', 104.20, uom=33)
 
+        # Test force_update (UPDATE command handler)
+        node.reportDrivers = MagicMock()
+        node.force_update()
+        node.reportDrivers.assert_called_once()
+        self.assertEqual(node.commands, {'SET_MODE': ThermostatNode.set_mode, 'UPDATE': ThermostatNode.force_update})
+
     def test_thermostat_node_c(self):
         controller = MagicMock()
         controller.temp_uom = 4
@@ -336,6 +342,8 @@ class TestPG3Nodes(unittest.TestCase):
 
     def test_profile_builder(self):
         profile_f = _build_profile_definition("F")
+        self.assertIn("delete", profile_f)
+        self.assertEqual(profile_f["delete"], {"editors": ["*"], "nodedefs": ["*"], "linkdefs": ["*"]})
         self.assertIn("editors", profile_f)
         self.assertIn("nodedefs", profile_f)
         self.assertEqual(profile_f["linkdefs"], [])

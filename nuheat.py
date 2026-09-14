@@ -194,7 +194,16 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
         },
     ]
 
-    return {"editors": editors, "nodedefs": nodedefs, "linkdefs": []}
+    return {
+        "delete": {
+            "editors": ["*"],
+            "nodedefs": ["*"],
+            "linkdefs": ["*"],
+        },
+        "editors": editors,
+        "nodedefs": nodedefs,
+        "linkdefs": [],
+    }
 
 
 class Controller(BaseNode):
@@ -630,20 +639,6 @@ class Controller(BaseNode):
                     if hasattr(node, 'update_energy'):
                         node.update_energy()
 
-    def query(self, command=None):
-        LOGGER.info("Querying controller and all nodes...")
-        self.setDriver('TIME', int(time.time()), uom=151)
-        self.reportDrivers()
-        get_nodes = getattr(self.poly, 'getNodes', None)
-        nodes = get_nodes() if callable(get_nodes) else getattr(self, 'nodes', {})
-        nodes_iterable = nodes.values() if isinstance(nodes, dict) else nodes
-        for node in nodes_iterable:
-            if getattr(node, 'address', None) != self.address:
-                if hasattr(node, 'query'):
-                    node.query()
-                elif hasattr(node, 'reportDrivers'):
-                    node.reportDrivers()
-
     def discover(self, *args, **kwargs):
         token = self.get_access_token()
         if not token:
@@ -744,11 +739,6 @@ class Controller(BaseNode):
         LOGGER.info('Forcing update across all nodes...')
         self.setDriver('TIME', int(time.time()), uom=151)
         self.longPoll()
-        return True
-
-    def update_profile(self, command=None):
-        LOGGER.info('Installing / Updating profile...')
-        self._publish_profile(wait_response=True)
         return True
 
     commands = {

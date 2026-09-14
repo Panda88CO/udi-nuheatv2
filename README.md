@@ -79,7 +79,7 @@ The NodeServer automatically detects your account's preferred temperature scale 
   - **Last Update (`TIME`)**: Unix epoch timestamp (UOM 151) of the last data refresh for this thermostat.
   - **Commands**:
     - **Set Mode (`SET_MODE`)**: Interactive GUI command with inputs for Mode (Auto, Hold, Permanent Hold), Temperature, and Hold Minutes.
-    - **Query (`QUERY`)**: Queries current state from the NuHeat cloud.
+    - **Force Update (`UPDATE`)**: Immediately forces a data update for this thermostat.
   - **Energy Metrics (UOM 33 / kWh)**:
     - **Daily Energy** (`GV0`): Energy used today in kWh.
     - **Last 7 Days Energy** (`GV1`): Energy used over the past 7 days in kWh.
