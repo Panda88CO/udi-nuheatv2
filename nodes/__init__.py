@@ -1,5 +1,6 @@
 # __init__.py
 
+from .thermostat_node import ThermostatNode
 from .thermostat_node import ThermostatNode_F
 from .thermostat_node import ThermostatNode_C
 from .energy_log_day_node import EnergyLogDayNode

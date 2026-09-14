@@ -1,9 +1,12 @@
+import json
 import sys
 import time
 import requests
 import threading
 
 from nodes.base import LOGGER, BaseNode
+
+VERSION = "2.1.8"
 
 try:
     import udi_interface
@@ -45,6 +48,7 @@ except ImportError:
         def oauthHandler(self, token):
             pass
 
+from nodes import ThermostatNode
 from nodes import ThermostatNode_F
 from nodes import ThermostatNode_C
 from nodes import EnergyLogDayNode
@@ -53,9 +57,182 @@ from nodes import EnergyLogYearNode
 from nuheat import NuHeat
 
 
+def _build_profile_definition(temp_unit: str = "F") -> dict:
+    """Build the dynamic JSON profile definition for PG3/PG3x.
+
+    CLITEMP supports both temperature UOMs: 'F' -> 17 and 'C' -> 4.
+    """
+    if temp_unit == "C":
+        clitemp_ranges = [
+            {"uom": "4", "min": 5, "max": 40, "step": 1, "prec": 0},
+            {"uom": "25", "subset": "0,1", "names": {"0": "Schedule", "1": "Permanent Hold"}},
+        ]
+        clitemp_range_input = [
+            {"uom": "4", "min": 5, "max": 40, "step": 1, "prec": 0},
+        ]
+    else:
+        clitemp_ranges = [
+            {"uom": "17", "min": 41, "max": 104, "step": 1, "prec": 0},
+            {"uom": "25", "subset": "0,1", "names": {"0": "Schedule", "1": "Permanent Hold"}},
+        ]
+        clitemp_range_input = [
+            {"uom": "17", "min": 41, "max": 104, "step": 1, "prec": 0},
+        ]
+
+    editors = [
+        {
+            "id": "bool",
+            "ranges": [
+                {"uom": "2", "subset": "0-1", "names": {"0": "Offline", "1": "Online"}}
+            ],
+        },
+        {
+            "id": "CLIHCS",
+            "ranges": [
+                {"uom": "66", "subset": "0-1", "names": {"0": "Idle", "1": "Heating"}}
+            ],
+        },
+        {
+            "id": "MODE_SEL",
+            "ranges": [
+                {
+                    "uom": "25",
+                    "subset": "1,2,3",
+                    "names": {
+                        "1": "Auto",
+                        "2": "Hold",
+                        "3": "Permanent Hold",
+                    },
+                }
+            ],
+        },
+        {
+            "id": "CLITEMP",
+            "ranges": clitemp_ranges,
+        },
+        {
+            "id": "clitemp_range_input",
+            "ranges": clitemp_range_input,
+        },
+        {
+            "id": "CLITEMP_INPUT",
+            "ranges": clitemp_range_input,
+        },
+        {
+            "id": "HOLD_TIME",
+            "ranges": [
+                {"uom": "151", "min": 0, "max": 4294967295, "prec": 0},
+                {
+                    "uom": "25",
+                    "subset": "0,1",
+                    "names": {
+                        "0": "Schedule",
+                        "1": "Permanent Hold",
+                    },
+                },
+            ],
+        },
+        {
+            "id": "HOLD_MINS",
+            "ranges": [
+                {"uom": "45", "min": 0, "max": 1440, "step": 1, "prec": 0}
+            ],
+        },
+        {
+            "id": "TPW",
+            "ranges": [
+                {"uom": "33", "min": 0, "max": 100000, "prec": 2}
+            ],
+        },
+        {
+            "id": "timestamp",
+            "ranges": [
+                {"uom": "151", "min": 0, "max": 4294967295, "prec": 0}
+            ],
+        },
+    ]
+
+    nodedefs = [
+        {
+            "id": "controller",
+            "name": "NuHeat Signature Controller",
+            "icon": "Thermostat",
+            "properties": [
+                {"id": "ST", "name": "NodeServer Online", "editor": "bool"},
+                {"id": "TIME", "name": "Last Update", "editor": "timestamp"},
+            ],
+            "cmds": {
+                "accepts": [
+                    {"id": "UPDATE", "name": "Update"},
+                ],
+                "sends": [
+                    {"id": "DON"},
+                    {"id": "DOF"},
+                ],
+            },
+            "links": {"ctl": [], "rsp": []},
+        },
+        {
+            "id": "THERMOSTAT",
+            "name": "Thermostat Node",
+            "icon": "Thermostat",
+            "properties": [
+                {"id": "ST", "name": "Current Temperature", "editor": "CLITEMP"},
+                {"id": "CLISPH", "name": "Heat Setpoint", "editor": "CLITEMP"},
+                {"id": "CLIMD", "name": "Mode", "editor": "MODE_SEL"},
+                {"id": "CLIHCS", "name": "Heat State", "editor": "CLIHCS"},
+                {"id": "GV0", "name": "Daily Energy", "editor": "TPW"},
+                {"id": "GV1", "name": "Last 7 Days Energy", "editor": "TPW"},
+                {"id": "GV2", "name": "Monthly Energy", "editor": "TPW"},
+                {"id": "GV3", "name": "Yearly Energy", "editor": "TPW"},
+                {"id": "GV4", "name": "Hold End Time", "editor": "HOLD_TIME"},
+                {"id": "GV5", "name": "Online", "editor": "bool"},
+                {"id": "TIME", "name": "Last Update", "editor": "timestamp"},
+            ],
+            "cmds": {
+                "accepts": [
+                    {"id": "UPDATE", "name": "Force Update"},
+                    {"id": "SET_AUTO", "name": "Set Auto"},
+                    {
+                        "id": "SET_HOLD",
+                        "name": "Set Hold",
+                        "parameters": [
+                            {"id": "temp", "name": "Temperature", "editor": "clitemp_range_input", "init": "CLISPH"},
+                            {"id": "hold", "name": "Hold Minutes", "editor": "HOLD_MINS"},
+                        ],
+                    },
+                    {
+                        "id": "SET_PERM_HOLD",
+                        "name": "Set Permanent Hold",
+                        "parameters": [
+                            {"id": "temp", "name": "Temperature", "editor": "clitemp_range_input", "init": "CLISPH"},
+                        ],
+                    },
+                ],
+                "sends": [],
+            },
+            "links": {"ctl": [], "rsp": []},
+        },
+    ]
+
+    return {
+        "delete": {
+            "editors": ["*"],
+            "nodedefs": ["*"],
+            "linkdefs": ["*"],
+        },
+        "editors": editors,
+        "nodedefs": nodedefs,
+        "linkdefs": [],
+    }
+
+
 class Controller(BaseNode):
     id = 'controller'
-    drivers = [{'driver': 'ST', 'value': 1, 'uom': 2}]
+    drivers = [
+        {'driver': 'ST', 'value': 1, 'uom': 2},
+        {'driver': 'TIME', 'value': 0, 'uom': 151}
+    ]
 
     def __init__(self, polyglot, primary='controller', address='controller', name='NuHeat'):
         super(Controller, self).__init__(polyglot, primary, address, name)
@@ -64,15 +241,40 @@ class Controller(BaseNode):
         self.customParams = Custom(polyglot, 'customparams')
         self.Notices = getattr(polyglot, 'Notices', {})
         self.oauth = OAuth(polyglot)
+        # Pre-register NuHeat OAuth endpoints so they are never missing in udi_interface.OAuth
+        oauth_defaults = {
+            'name': 'Nuheat',
+            'auth_endpoint': 'https://identity.mynuheat.com/connect/authorize',
+            'token_endpoint': 'https://identity.mynuheat.com/connect/token',
+            'scope': 'openapi openid profile offline_access',
+            'addScope': True,
+            'addRedirect': True
+        }
+        if hasattr(self.oauth, 'updateOauthSettings'):
+            self.oauth.updateOauthSettings(oauth_defaults)
+
         self.NuHeat = NuHeat(token_or_provider=self.get_access_token)
         self.temperature_scale = None
+        self.temp_unit = "F"
         self.temp_uom = 17
         self.tz = "America/New_York"
         self.disco = 0
 
+        self.client_id = None
+        self.client_secret = None
+        self.oauthReady = False
+        self.hb_state = 0
+
+        # Confirmation tracking
+        self._confirmed_node_addresses = set()
+        self._deleted_node_addresses = set()
+
         # Thread synchronization flags
+        self.customParam_done = False
         self.handleCustomParamsDone = False
+        self.customNsDone = False
         self.customNsHandlerDone = False
+        self.config_done = False
         self.configDone = False
         self.oauth_lock = threading.Lock()
 
@@ -88,7 +290,112 @@ class Controller(BaseNode):
             self.poly.subscribe(self.poly.CUSTOMPARAMS, self.customParamsHandler)
             if hasattr(self.poly, 'CONFIGDONE'):
                 self.poly.subscribe(self.poly.CONFIGDONE, self.configDoneHandler)
+            if hasattr(self.poly, 'ADDNODEDONE'):
+                self.poly.subscribe(self.poly.ADDNODEDONE, self.node_done)
+            if hasattr(self.poly, 'DELNODEDONE'):
+                self.poly.subscribe(self.poly.DELNODEDONE, self.node_deleted)
             self.poly.subscribe(self.poly.DISCOVER, self.discover)
+
+    def node_done(self, node):
+        address = getattr(node, "address", None)
+        if address is None and isinstance(node, dict):
+            address = node.get("address") or node.get("node")
+        if address:
+            self._confirmed_node_addresses.add(address)
+        LOGGER.debug(f"[node_done] Node {address or 'unknown'} is done")
+
+    def node_deleted(self, node):
+        address = getattr(node, "address", None)
+        if address is None and isinstance(node, dict):
+            address = node.get("address") or node.get("node")
+        if address:
+            self._deleted_node_addresses.add(address)
+            self._confirmed_node_addresses.discard(address)
+        LOGGER.debug(f"[node_deleted] Node {address or 'unknown'} deletion complete")
+
+    def _wait_for_node_confirmed(self, address: str, timeout: float = 10.0) -> bool:
+        """Block until PG3 sends ADDNODEDONE for *address*, or timeout expires."""
+        if address in self._confirmed_node_addresses:
+            LOGGER.debug(f"[_wait_for_node_confirmed] Node {address} already confirmed")
+            return True
+
+        event = threading.Event()
+
+        def _handler(node):
+            node_addr = getattr(node, "address", None)
+            if node_addr is None and isinstance(node, dict):
+                node_addr = node.get("address") or node.get("node")
+            if node_addr == address:
+                event.set()
+
+        if hasattr(self.poly, 'subscribe') and hasattr(self.poly, 'ADDNODEDONE'):
+            self.poly.subscribe(self.poly.ADDNODEDONE, _handler)
+            if address in self._confirmed_node_addresses:
+                if hasattr(self.poly, 'unsubscribe'):
+                    self.poly.unsubscribe(self.poly.ADDNODEDONE, _handler)
+                LOGGER.debug(f"[_wait_for_node_confirmed] Node {address} confirmed before local wait")
+                return True
+            confirmed = event.wait(timeout=timeout)
+            if hasattr(self.poly, 'unsubscribe'):
+                self.poly.unsubscribe(self.poly.ADDNODEDONE, _handler)
+            if not confirmed:
+                LOGGER.warning(f"[_wait_for_node_confirmed] Timeout waiting for PG3 to confirm node {address}")
+            else:
+                LOGGER.debug(f"[_wait_for_node_confirmed] PG3 confirmed node {address}")
+            return confirmed
+        return True
+
+    def _profiles_match(self, current_profile, expected_profile) -> bool:
+        if not isinstance(current_profile, dict) or not isinstance(expected_profile, dict):
+            return False
+        return all(
+            current_profile.get(k, []) == expected_profile.get(k, [])
+            for k in ("editors", "nodedefs", "linkdefs")
+        )
+
+    def _publish_profile(self, wait_response: bool = False) -> None:
+        update_json_profile = getattr(self.poly, "updateJsonProfile", None)
+        if not callable(update_json_profile):
+            LOGGER.info("[_publish_profile] updateJsonProfile is unavailable, falling back to updateProfile")
+            if hasattr(self.poly, "updateProfile"):
+                self.poly.updateProfile()
+            return
+
+        profile = _build_profile_definition(self.temp_unit)
+
+        current_profile_getter = getattr(self.poly, "getJsonProfile", None)
+        if callable(current_profile_getter):
+            try:
+                current_profile = current_profile_getter({"waitResponse": False})
+                if self._profiles_match(current_profile, profile):
+                    LOGGER.info("[_publish_profile] Profile already up to date, skipping publish")
+                    return
+            except TypeError:
+                try:
+                    current_profile = current_profile_getter()
+                    if self._profiles_match(current_profile, profile):
+                        LOGGER.info("[_publish_profile] Profile already up to date, skipping publish")
+                        return
+                except Exception as err:
+                    LOGGER.warning(f"[_publish_profile] Unable to read existing profile: {err}")
+            except Exception as err:
+                LOGGER.warning(f"[_publish_profile] Unable to read existing profile: {err}")
+
+        try:
+            LOGGER.debug(f"[_publish_profile] Publishing profile: {json.dumps(profile, sort_keys=True, indent=2)}")
+            update_json_profile(profile, {"waitResponse": wait_response})
+            LOGGER.info("[_publish_profile] Dynamic JSON profile published successfully")
+            if hasattr(self.poly, "Notices") and hasattr(self.poly.Notices, "delete"):
+                self.poly.Notices.delete("profile")
+        except TypeError:
+            update_json_profile(profile)
+            LOGGER.info("[_publish_profile] Dynamic JSON profile published successfully")
+            if hasattr(self.poly, "Notices") and hasattr(self.poly.Notices, "delete"):
+                self.poly.Notices.delete("profile")
+        except Exception as err:
+            LOGGER.error(f"[_publish_profile] Profile publish failed: {err}")
+            if hasattr(self.poly, "Notices") and hasattr(self.poly.Notices, "__setitem__"):
+                self.poly.Notices["profile"] = f"Dynamic profile publish failed: {err}"
 
     def get_access_token(self):
         try:
@@ -97,51 +404,99 @@ class Controller(BaseNode):
             LOGGER.debug(f"NuHeat getAccessToken: {e}")
             return None
 
+    def is_oauth_configured(self):
+        oauth_cfg = getattr(self.oauth, '_oauthConfig', {})
+        override = getattr(self.oauth, '_oauthConfigOverride', {})
+        client_id = self.client_id or (oauth_cfg.get('client_id') if hasattr(oauth_cfg, 'get') else None) or (override.get('client_id') if hasattr(override, 'get') else None)
+        client_secret = self.client_secret or (oauth_cfg.get('client_secret') if hasattr(oauth_cfg, 'get') else None) or (override.get('client_secret') if hasattr(override, 'get') else None)
+        return bool(client_id and client_secret)
+
     def update_oauth_config(self):
+        """Updates OAuth settings if credentials were provided in customParams, customNs, or controller attributes."""
         with self.oauth_lock:
-            client_id = self.customParams.get('clientId') or self.customParams.get('client_id')
-            client_secret = self.customParams.get('clientSecret') or self.customParams.get('client_secret')
+            client_id = self.client_id or self.customParams.get('clientId') or self.customParams.get('client_id')
+            client_secret = self.client_secret or self.customParams.get('clientSecret') or self.customParams.get('client_secret')
             if client_id and client_secret:
+                self.client_id = client_id
+                self.client_secret = client_secret
+                self.oauthReady = True
                 oauth_cfg = {
                     'name': 'Nuheat',
                     'client_id': client_id,
                     'client_secret': client_secret,
                     'auth_endpoint': 'https://identity.mynuheat.com/connect/authorize',
                     'token_endpoint': 'https://identity.mynuheat.com/connect/token',
-                    'scope': 'openapi openid offline_access',
+                    'scope': 'openapi openid profile offline_access',
                     'addScope': True,
                     'addRedirect': True
                 }
                 if hasattr(self.oauth, 'updateOauthSettings'):
                     self.oauth.updateOauthSettings(oauth_cfg)
-                else:
-                    self.oauth.customNsHandler('oauth', oauth_cfg)
-
-                # Explicitly persist oauth config to Polyglot so PG3 has it for the Authenticate button
-                if hasattr(self.poly, 'send'):
-                    self.poly.send({'set': [{'key': 'oauth', 'value': oauth_cfg}]}, 'custom')
+                # If customNsHandler('oauth') hasn't initialized _oauthConfig, initialize it now
+                if hasattr(self.oauth, '_oauthConfigInitialized') and not self.oauth._oauthConfigInitialized:
+                    if hasattr(self.oauth, 'customNsHandler'):
+                        self.oauth.customNsHandler('oauth', {})
+                if hasattr(self.Notices, 'delete'):
+                    self.Notices.delete('oauth_creds')
 
     def customNsHandler(self, key, data):
-        LOGGER.debug(f"customNsHandler called for {key}")
+        LOGGER.debug(f"customNsHandler called for {key}: {data}")
         try:
             # Polyglot sends empty customns values as empty strings ('') instead of dicts
-            if isinstance(data, str):
+            if isinstance(data, str) or not isinstance(data, dict):
                 data = {}
 
             if key == 'oauth':
-                # Ensure OAuth config override is set from customparams if present
+                # Check if credentials exist in customparams or controller attributes
                 self.update_oauth_config()
 
-                # If PG3 sends empty oauth data and no credentials have been entered yet,
-                # do not pass empty data to self.oauth to avoid spurious error logs
+                # Extract credentials if PG3 OAuth setup provided them in data
+                client_id = data.get('client_id') or data.get('clientId') or self.client_id
+                client_secret = data.get('client_secret') or data.get('clientSecret') or self.client_secret
+                if client_id:
+                    self.client_id = client_id
+                if client_secret:
+                    self.client_secret = client_secret
+
                 override = getattr(self.oauth, '_oauthConfigOverride', {})
-                if not data and not (override and override.get('client_id')):
+                has_client = bool(self.client_id or (isinstance(override, dict) and override.get('client_id')))
+                has_secret = bool(self.client_secret or (isinstance(override, dict) and override.get('client_secret')))
+
+                # If PG3 sends empty oauth data and no credentials have been configured yet,
+                # do not pass empty data to self.oauth to avoid spurious error logs from udi_interface
+                if not (has_client and has_secret):
                     LOGGER.info("OAuth configuration is pending credentials in PG3 configuration.")
+                    self.customNsDone = True
                     self.customNsHandlerDone = True
                     return
 
-            self.oauth.customNsHandler(key, data or {})
-            self.customNsHandlerDone = True
+                # If credentials are present, update oauth override and delegate to udi_interface.OAuth
+                oauth_cfg = {
+                    'name': 'Nuheat',
+                    'client_id': self.client_id,
+                    'client_secret': self.client_secret,
+                    'auth_endpoint': 'https://identity.mynuheat.com/connect/authorize',
+                    'token_endpoint': 'https://identity.mynuheat.com/connect/token',
+                    'scope': 'openapi openid profile offline_access',
+                    'addScope': True,
+                    'addRedirect': True
+                }
+                if hasattr(self.oauth, 'updateOauthSettings'):
+                    self.oauth.updateOauthSettings(oauth_cfg)
+
+                if hasattr(self.oauth, 'customNsHandler'):
+                    self.oauth.customNsHandler(key, data)
+
+                self.oauthReady = True
+                LOGGER.debug("OAuth configuration automatically populated from PG3 OAuth setup")
+
+            elif key == 'oauthTokens':
+                if hasattr(self.oauth, 'customNsHandler'):
+                    self.oauth.customNsHandler(key, data)
+
+            if key in ('oauth', 'oauthTokens'):
+                self.customNsDone = True
+                self.customNsHandlerDone = True
             LOGGER.debug(f"customNsHandler finished for {key}")
         except Exception as e:
             LOGGER.error(f"Error handling customNs {key}: {e}")
@@ -149,12 +504,12 @@ class Controller(BaseNode):
     def configDoneHandler(self):
         LOGGER.info("configDoneHandler: PG3 initial configuration messages complete.")
         self.configDone = True
-        self.update_oauth_config()
+        self.config_done = True
 
     def oauthHandler(self, token):
         try:
             wait_seconds = 0
-            while not self.handleCustomParamsDone and wait_seconds < 5:
+            while not (self.customParam_done or self.handleCustomParamsDone) and wait_seconds < 5:
                 time.sleep(0.5)
                 wait_seconds += 0.5
 
@@ -166,6 +521,29 @@ class Controller(BaseNode):
         except Exception as e:
             LOGGER.error(f"Error in oauthHandler: {e}")
 
+    def get_configured_temp_unit(self):
+        """Returns 'C', 'F', or None if not configured in customParams."""
+        for key in ('temp_unit', 'temp_unt', 'TEMP_UNIT', 'TEMP_UNT'):
+            if key in self.customParams:
+                val = self.customParams[key]
+                if val:
+                    raw = str(val).strip().upper()
+                    if raw.startswith('C'):
+                        return 'C'
+                    elif raw.startswith('F'):
+                        return 'F'
+
+        rawdata = getattr(self.customParams, '_rawdata', None)
+        if isinstance(rawdata, dict):
+            for key, val in rawdata.items():
+                if key.lower() in ('temp_unit', 'temp_unt'):
+                    raw = str(val).strip().upper()
+                    if raw.startswith('C'):
+                        return 'C'
+                    elif raw.startswith('F'):
+                        return 'F'
+        return None
+
     def customParamsHandler(self, data):
         LOGGER.debug(f"customParamsHandler called with {len(data) if hasattr(data, '__len__') else 'unknown'} params")
         self.customParams.load(data)
@@ -175,42 +553,93 @@ class Controller(BaseNode):
             self.tz = "America/New_York"
             self.customParams['tz'] = self.tz
 
+        prev_temp_unit = self.temp_unit
+        configured_unit = self.get_configured_temp_unit()
+        if configured_unit:
+            self.temp_unit = configured_unit
+            self.temp_uom = 4 if configured_unit == 'C' else 17
+        else:
+            # Pre-populate temp_unit so it displays in PG3 Custom Configuration Parameters
+            self.customParams['temp_unit'] = 'F'
+            self.temp_unit = 'F'
+            self.temp_uom = 17
+
+        if self.temp_unit != prev_temp_unit:
+            self._publish_profile()
+            get_nodes = getattr(self.poly, 'getNodes', None)
+            nodes = get_nodes() if callable(get_nodes) else getattr(self, 'nodes', {})
+            nodes_iterable = nodes.values() if isinstance(nodes, dict) else nodes
+            for node in nodes_iterable:
+                if hasattr(node, 'temp_uom'):
+                    node.temp_uom = self.temp_uom
+                    if hasattr(node, 'update_info'):
+                        node.update_info()
+                    if hasattr(node, 'update_energy'):
+                        node.update_energy()
+
         self.update_oauth_config()
         self.handleCustomParamsDone = True
-        LOGGER.debug("customParamsHandler finished")
+        self.customParam_done = True
+        LOGGER.debug(f"customParamsHandler finished: tz={self.tz}, temp_unit={self.temp_unit} (uom {self.temp_uom})")
 
     def start(self):
         LOGGER.info('Starting NuHeat NodeServer...')
 
-        # In PG3 multi-threaded startup, ensure customParams and customNs have had time to finish
+        # In PG3 multi-threaded startup, ensure customParams, customNS, and config are handled before starting
         wait_seconds = 0
-        while not (self.handleCustomParamsDone and (self.configDone or wait_seconds >= 5)) and wait_seconds < 10:
-            LOGGER.debug(f"Waiting for custom parameters to complete before start ({wait_seconds:.1f}s)...")
-            time.sleep(0.5)
-            wait_seconds += 0.5
+        max_wait = 15
+        while not (self.customParam_done and self.customNsDone and self.config_done and self.oauthReady) and wait_seconds < max_wait:
+            LOGGER.info(
+                f"Waiting for node to initialize: customParams={self.customParam_done}, "
+                f"customNS={self.customNsDone}, configDone={self.config_done}, oauthReady={self.oauthReady} ({wait_seconds}s)"
+            )
+            time.sleep(1)
+            wait_seconds += 1
 
         self.update_oauth_config()
-        self.setDriver('ST', 1)
-        if hasattr(self.poly, 'updateProfile'):
-            self.poly.updateProfile()
+        self.setDriver('ST', 1, uom=2)
+        self.setDriver('TIME', int(time.time()), uom=151)
+        self._publish_profile()
+
+        if not self.is_oauth_configured():
+            LOGGER.warning("NuHeat OAuth credentials (clientId & clientSecret) are missing. Please configure them in PG3.")
+            if hasattr(self.Notices, '__setitem__'):
+                self.Notices['oauth_creds'] = "OAuth credentials required: Please configure 'clientId' and 'clientSecret' in Custom Configuration Parameters."
+        else:
+            if hasattr(self.Notices, 'delete'):
+                self.Notices.delete('oauth_creds')
 
         token = self.get_access_token()
         if token:
             if hasattr(self.Notices, 'delete'):
                 self.Notices.delete('auth')
             self.discover()
+            self.longPoll()
         else:
             LOGGER.warning("NuHeat is not authenticated. Please click 'Authenticate' in the PG3 dashboard.")
             if hasattr(self.Notices, '__setitem__'):
                 self.Notices['auth'] = "Please click 'Authenticate' in the PG3 dashboard to link your NuHeat account."
 
     def poll(self, polltype):
+        self.setDriver('TIME', int(time.time()), uom=151)
         if 'shortPoll' in polltype:
             self.shortPoll()
         elif 'longPoll' in polltype:
             self.longPoll()
 
+    def heartbeat(self):
+        """Toggle DON / DOF command to indicate node server heartbeat."""
+        if self.hb_state == 0:
+            self.hb_state = 1
+            if hasattr(self, 'reportCmd'):
+                self.reportCmd('DON')
+        else:
+            self.hb_state = 0
+            if hasattr(self, 'reportCmd'):
+                self.reportCmd('DOF')
+
     def shortPoll(self):
+        self.heartbeat()
         if self.disco == 1:
             get_nodes = getattr(self.poly, 'getNodes', None)
             nodes = get_nodes() if callable(get_nodes) else getattr(self, 'nodes', {})
@@ -225,17 +654,11 @@ class Controller(BaseNode):
             nodes = get_nodes() if callable(get_nodes) else getattr(self, 'nodes', {})
             nodes_iterable = nodes.values() if isinstance(nodes, dict) else nodes
             for node in nodes_iterable:
-                if getattr(node, 'address', None) != self.address and hasattr(node, 'update_info'):
-                    node.update_info()
-
-    def query(self, command=None):
-        self.reportDrivers()
-        get_nodes = getattr(self.poly, 'getNodes', None)
-        nodes = get_nodes() if callable(get_nodes) else getattr(self, 'nodes', {})
-        nodes_iterable = nodes.values() if isinstance(nodes, dict) else nodes
-        for node in nodes_iterable:
-            if hasattr(node, 'reportDrivers'):
-                node.reportDrivers()
+                if getattr(node, 'address', None) != self.address:
+                    if hasattr(node, 'update_info'):
+                        node.update_info()
+                    if hasattr(node, 'update_energy'):
+                        node.update_energy()
 
     def discover(self, *args, **kwargs):
         token = self.get_access_token()
@@ -248,12 +671,21 @@ class Controller(BaseNode):
         if hasattr(self.Notices, 'delete'):
             self.Notices.delete('auth')
 
-        account_info = self.NuHeat.get_account()
-        if account_info:
-            self.temperature_scale = account_info.get('temperatureScale', 'Fahrenheit')
-            self.temp_uom = 17 if self.temperature_scale == "Fahrenheit" else 4
-        else:
-            self.temp_uom = 17
+        configured_unit = self.get_configured_temp_unit()
+        if not configured_unit:
+            account_info = self.NuHeat.get_account()
+            if account_info:
+                self.temperature_scale = account_info.get('temperatureScale', 'Fahrenheit')
+                if self.temperature_scale.lower().startswith('c'):
+                    self.temp_unit = "C"
+                    self.temp_uom = 4
+                else:
+                    self.temp_unit = "F"
+                    self.temp_uom = 17
+            else:
+                self.temp_unit = "F"
+                self.temp_uom = 17
+            self._publish_profile()
 
         thermostats = self.NuHeat.get_thermostat()
         if not thermostats:
@@ -298,42 +730,49 @@ class Controller(BaseNode):
                         self.poly.delNode(stat_address)
                         time.sleep(1)
 
-            if self.temp_uom == 17:
-                add_node(ThermostatNode_F(self.poly, stat_address, stat_address, name, self))
-            else:
-                add_node(ThermostatNode_C(self.poly, stat_address, stat_address, name, self))
+            stat_node = ThermostatNode(self.poly, stat_address, stat_address, name, self, temp_uom=self.temp_uom)
+            add_node(stat_node)
+            try:
+                stat_node.update_info()
+                stat_node.update_energy()
+            except Exception as e:
+                LOGGER.error(f"Error updating thermostat {stat_address} on discovery: {e}")
 
-            time.sleep(0.5)
-            add_node(EnergyLogDayNode(self.poly, stat_address, energy_log_day_address, f"{name} Energy-Day", self))
-            time.sleep(0.5)
-            add_node(EnergyLogWeekNode(self.poly, stat_address, energy_log_week_address, f"{name} Energy-Week", self))
-            time.sleep(0.5)
-            add_node(EnergyLogYearNode(self.poly, stat_address, energy_log_year_address, f"{name} Energy-Year", self))
-            time.sleep(0.5)
+            # Clean up any legacy energy child nodes from previous versions
+            for child_addr in (energy_log_day_address, energy_log_week_address, energy_log_year_address):
+                legacy_child = None
+                if hasattr(self.poly, '_nodes') and isinstance(self.poly._nodes, dict):
+                    legacy_child = self.poly._nodes.get(child_addr)
+                if legacy_child is None and hasattr(self.poly, 'getNode'):
+                    legacy_child = self.poly.getNode(child_addr)
+                elif legacy_child is None and hasattr(self, 'nodes') and isinstance(self.nodes, dict):
+                    legacy_child = self.nodes.get(child_addr)
+
+                if legacy_child is not None:
+                    LOGGER.info(f"Removing legacy child node {child_addr} from PG3...")
+                    if hasattr(self.poly, 'delNode'):
+                        self.poly.delNode(child_addr)
 
         self.disco = 1
 
-    def update_profile(self, command=None):
-        LOGGER.info('Installing / Updating profile...')
-        if hasattr(self.poly, 'updateProfile'):
-            return self.poly.updateProfile()
-        elif hasattr(self.poly, 'installprofile'):
-            return self.poly.installprofile()
+    def update_nodes(self, command=None):
+        """Forces an immediate update across all nodes (executes longPoll)."""
+        LOGGER.info('Forcing update across all nodes...')
+        self.setDriver('TIME', int(time.time()), uom=151)
+        self.longPoll()
         return True
 
     commands = {
-        'QUERY': query,
-        'DISCOVER': discover,
-        'UPDATE_PROFILE': update_profile
+        'UPDATE': update_nodes,
     }
 
 
 if __name__ == "__main__":
     try:
-        LOGGER.info('Starting NuHeat Polyglot interface...')
+        LOGGER.info(f'Starting NuHeat Polyglot interface v{VERSION}...')
 
         polyglot = udi_interface.Interface([])
-        polyglot.start('2.0.2')
+        polyglot.start(VERSION)
         if hasattr(polyglot, 'setCustomParamsDoc'):
             polyglot.setCustomParamsDoc()
         control = Controller(polyglot, 'controller', 'controller', 'NuHeat')

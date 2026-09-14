@@ -8,7 +8,7 @@ A Polyglot v3 (PG3 / PG3x) NodeServer for integrating **NuHeat Signature** radia
 
 - Universal Devices controller (**eisy** or **Polisy**) running **PG3** or **PG3x**
 - One or more **NuHeat Signature** WiFi floor heating thermostats
-- Active **[My NuHeat](https://mynuheat.com)** portal account
+- Active **[My NuHeat](https://mynuheat.com)** account
 - NuHeat API OAuth credentials (**Client ID** & **Client Secret**)
 
 ---
@@ -19,21 +19,6 @@ A Polyglot v3 (PG3 / PG3x) NodeServer for integrating **NuHeat Signature** radia
 2. Go to the **NodeServer Store**.
 3. Locate **NuHeat** and click **Install** (or install from your GitHub repository URL).
 
----
-
-## OAuth Client Settings
-
-When requesting or configuring your OAuth application with NuHeat, use the following settings:
-
-| Setting | Value |
-| :--- | :--- |
-| **Grant Type** | `Authorization Code` (`authorization_code`) & `Refresh Token` (`offline_access`) |
-| **Return URI (Redirect URI)** | `https://my.isy.io/api/cloudlink/redirect` |
-| **Authorization Endpoint** | `https://identity.mynuheat.com/connect/authorize` |
-| **Token Endpoint** | `https://identity.mynuheat.com/connect/token` |
-| **Scopes** | `openapi openid profile offline_access` |
-
----
 
 ## Configuration
 
@@ -41,57 +26,77 @@ In the PG3 dashboard under the NodeServer's **Configuration** tab, add the follo
 
 | Key | Type | Description | Default |
 | :--- | :--- | :--- | :--- |
-| `clientId` | string | Your NuHeat OAuth Client ID *(Required)* | *(none)* |
-| `clientSecret` | string | Your NuHeat OAuth Client Secret *(Required)* | *(none)* |
+| `clientId` | string | Your NuHeat OAuth Client ID (if not provided via PG3 OAuth setup) | *(none)* |
+| `clientSecret` | string | Your NuHeat OAuth Client Secret (if not provided via PG3 OAuth setup) | *(none)* |
 | `tz` | string | Your local tz database timezone name *(Required for energy logs)* | `America/New_York` |
+| `temp_unit` | string | Temperature unit: `F` for Fahrenheit or `C` for Celsius | `F` |
 
 *Refer to the [tz database time zones list](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) to find your timezone string (e.g., `America/New_York`, `America/Chicago`, `America/Denver`, `America/Los_Angeles`).*
+
+> [!NOTE]
+> `clientId` and `clientSecret` can be configured either via PG3's OAuth setup or entered in **Custom Configuration Parameters** (`clientId` and `clientSecret`).
 
 ---
 
 ## First-Time Setup & Authentication
 
-1. **Enter Credentials**: Save your `clientId`, `clientSecret`, and `tz` in the Custom Configuration Parameters.
-2. **Authenticate**: Click the **Authenticate** button on the NodeServer details page in the PG3 dashboard.
-3. **Log In**: A browser window will open to the NuHeat login page. Sign into your My NuHeat account and grant access.
-4. **Discovery**: Once authentication completes, the NodeServer will automatically discover your connected thermostats and create all device nodes in your Admin Console. You can also trigger discovery manually by clicking **Discover** on the Controller node.
+1. **Authenticate**: Click the **Authenticate** button on the NodeServer details page in the PG3 dashboard.
+2. **Log In**: A browser window will open to the NuHeat login page. Sign into your My NuHeat account and grant access.
+3. **Discovery**: Once authentication completes, the NodeServer automatically discovers your connected thermostats and creates all device nodes in your Admin Console.
 
 ---
 
-## Thermostat Operating Mode
+## Setting Operating Mode & Setpoint
 
-For the NodeServer to have full setpoint control without conflicting with built-in schedules:
-1. On the physical thermostat screen, tap **Setup** → **Preferences**.
-2. Tap **Operating Mode** at the bottom of the screen.
-3. Change the selection from **Auto** to **Manual**.
-4. *(Note: Manual mode disables internal cloud/app schedules so that your ISY/eisy programs have exclusive control).*
+The thermostat uses 3 dedicated commands to control operating mode and heating setpoint:
+- **Set Auto (`SET_AUTO`)**: Follows internal schedule. Takes no parameters. Setpoint (`CLISPH`) and Hold End Time (`GV4`) display as `Schedule`.
+- **Set Hold (`SET_HOLD`)**: Temporary hold with 2 parameters:
+  - **Temperature (`temp`)**: Target heating setpoint in configured scale (°F or °C).
+  - **Hold Minutes (`hold`)**: Duration in minutes (0–1440). Sets `GV4` to the hold expiration timestamp (Unix epoch timestamp, UOM 151).
+- **Set Permanent Hold (`SET_PERM_HOLD`)**: Manual hold with 1 parameter:
+  - **Temperature (`temp`)**: Target heating setpoint in configured scale (°F or °C) permanently until changed. `GV4` displays as `Permanent Hold`.
 
 ---
 
 ## Features & Discovered Nodes
 
-The NodeServer automatically detects your account's preferred temperature scale (°F or °C) and creates the following nodes for each thermostat:
+The NodeServer automatically detects your account's preferred temperature scale (°F or °C) and creates the following nodes:
 
-- **Controller Node**: Manages connection, authentication status, and discovery.
+- **Controller Node**:
+  - **Drivers**:
+    - **NodeServer Online (`ST`)**: Indicates whether the NodeServer process is running and connected (Online / Offline, UOM 2).
+    - **Last Update (`TIME`)**: Unix epoch timestamp (UOM 151) of the last successful communication/poll with the controller.
+  - **Heartbeat (`DON` / `DOF`)**: Emits alternating `DON` and `DOF` control events on each short poll for ISY watchdog / heartbeat monitoring programs.
+  - **Commands**:
+    - **Update (`UPDATE`)**: Immediately forces an update across all nodes and queries fresh energy metrics (executes long poll).
+
 - **Thermostat Node (`°F` or `°C`)**:
-  - Reports current floor temperature and target setpoint.
-  - Reports heating status (idle / heating).
-  - Set target heating temperature directly from programs and Admin Console.
-- **Energy Log Nodes**:
-  - **Energy Log - Day**: Daily power consumption (watt-hours).
-  - **Energy Log - Week**: Weekly power consumption (watt-hours).
-  - **Energy Log - Year**: Yearly power consumption (watt-hours).
+  - **Temperature & Setpoint**: Reports current temperature (`ST`) and target setpoint (`CLISPH` — displays `Schedule` in Auto mode).
+  - **Operating Mode (`CLIMD`)**: Auto, Hold, or Permanent Hold.
+  - **Heat State (`CLIHCS`)**: Idle or Heating.
+  - **Hold End Time (`GV4`)**: Displays the hold expiration timestamp (Unix epoch timestamp, UOM 151) when on Hold; displays `Permanent Hold` in Permanent Hold mode, and `Schedule` in Auto mode.
+  - **Online Status (`GV5`)**: Thermostat connection status (Online / Offline, UOM 2).
+  - **Last Update (`TIME`)**: Unix epoch timestamp (UOM 151) of the last data refresh for this thermostat.
+  - **Commands**:
+    - **Set Auto (`SET_AUTO`)**: Sets thermostat to follow internal schedule.
+    - **Set Hold (`SET_HOLD`)**: Sets temporary hold with target temperature and hold duration in minutes.
+    - **Set Permanent Hold (`SET_PERM_HOLD`)**: Sets permanent manual hold with target temperature.
+    - **Force Update (`UPDATE`)**: Immediately forces a data update for this thermostat.
+  - **Energy Metrics (UOM 33 / kWh)**:
+    - **Daily Energy** (`GV0`): Energy used today in kWh.
+    - **Last 7 Days Energy** (`GV1`): Energy used over the past 7 days in kWh.
+    - **Monthly Energy** (`GV2`): Month-to-date energy usage in kWh.
+    - **Yearly Energy** (`GV3`): Year-to-date energy usage in kWh.
 
 ---
 
 ## Polling
 
-- **Short Poll (default 300s)**: Queries thermostat status, temperature, and heating activity.
-- **Long Poll (default 900s)**: Updates energy usage metrics.
+- **Short Poll (default 300s)**: Queries thermostat status, temperature, mode, and heating activity.
+- **Long Poll (default 1800s)**: Updates energy usage metrics.
 
 ---
 
 ## Limitations
 
 - Internal thermostat scheduling is not edited through the NodeServer (use ISY programs instead).
-- Mode changes (e.g. Away mode) are currently managed via the NuHeat app or physical thermostat.

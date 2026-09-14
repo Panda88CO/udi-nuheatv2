@@ -35,6 +35,12 @@ except ImportError:
                             return
                     self.drivers.append({'driver': driver, 'value': value, 'uom': uom})
 
+                def getDriver(self, driver):
+                    for d in self.drivers:
+                        if isinstance(d, dict) and d.get('driver') == driver:
+                            return d
+                    return None
+
                 def reportDrivers(self):
                     pass
 

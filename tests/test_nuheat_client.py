@@ -172,6 +172,77 @@ class TestNuHeatClient(unittest.TestCase):
             headers=client.headers
         )
 
+    @patch('requests.get')
+    def test_get_energy_log_month_and_year(self, mock_get):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            'energyUsageType': 'Month',
+            'mondayIsFirstDay': False,
+            'energyUsage': [
+                {'entry': '8', 'minutes': 30, 'energyKWattHour': 0.25, 'chargeKWattHour': 5.0},
+                {'entry': '9', 'minutes': 60, 'energyKWattHour': 1.50, 'chargeKWattHour': 20.0}
+            ]
+        }
+        mock_get.return_value = mock_resp
+
+        client = NuHeat('dummy')
+        month_res = client.get_energy_log_month('12345678', '2026', 9)
+        self.assertEqual(month_res, [60, 1.50, 0.20])
+
+        # Test year sums all entries
+        year_res = client.get_energy_log_year('12345678', '2026')
+        self.assertEqual(year_res, [90, 1.75, 0.25])
+
+        # Verify caching: mock_get was only called once for both month and year queries
+        mock_get.assert_called_once_with(
+            'https://api.mynuheat.com/api/v1/EnergyLog/Month/12345678/2026',
+            headers=client.headers
+        )
+
+    @patch('requests.get')
+    def test_get_energy_summary_live_format(self, mock_get):
+        def mock_dispatch(url, headers=None):
+            resp = MagicMock()
+            resp.status_code = 200
+            if 'EnergyLog/Day/' in url:
+                resp.json.return_value = {
+                    'energyUsageType': 'Day',
+                    'energyUsage': [{'entry': str(i), 'minutes': 0, 'energyKWattHour': 0} for i in range(24)]
+                }
+            elif 'EnergyLog/Week/' in url:
+                resp.json.return_value = {
+                    'energyUsageType': 'Week',
+                    'energyUsage': [
+                        {'entry': '11', 'minutes': 0, 'energyKWattHour': 0},
+                        {'entry': '10', 'minutes': 0, 'energyKWattHour': 0},
+                        {'entry': '9', 'minutes': 0, 'energyKWattHour': 0},
+                        {'entry': '8', 'minutes': 0, 'energyKWattHour': 0.015},
+                        {'entry': '7', 'minutes': 0, 'energyKWattHour': 0.055},
+                        {'entry': '6', 'minutes': 0, 'energyKWattHour': 0.1116666}
+                    ]
+                }
+            elif 'EnergyLog/Month/' in url:
+                resp.json.return_value = {
+                    'energyUsageType': 'Month',
+                    'energyUsage': [
+                        {'entry': '12', 'minutes': 0, 'energyKWattHour': 0},
+                        {'entry': '9', 'minutes': 0, 'energyKWattHour': 1.381666},
+                        {'entry': '8', 'minutes': 0, 'energyKWattHour': 0.253333},
+                        {'entry': '1', 'minutes': 0, 'energyKWattHour': 0}
+                    ]
+                }
+            return resp
+
+        mock_get.side_effect = mock_dispatch
+
+        client = NuHeat('dummy')
+        summary = client.get_energy_summary('1262811', '2026-09-12', '2026', 9)
+        self.assertEqual(summary['day'], 0.0)
+        self.assertEqual(summary['week'], 0.18)
+        self.assertEqual(summary['month'], 1.38)
+        self.assertEqual(summary['year'], 1.63)
+
     def test_temperature_conversions(self):
         client = NuHeat('dummy')
         # 2000 hundredths C = 20.0 C -> 68.0 F
@@ -184,6 +255,22 @@ class TestNuHeatClient(unittest.TestCase):
         self.assertEqual(client.nuheat_celsius_to_normal(2100), 21.0)
         # 150 cents to usd
         self.assertEqual(client.nuheat_cents_to_dollars(150), 1.50)
+
+    @patch('nuheat.nuheat.LOGGER.debug')
+    @patch('requests.get')
+    def test_logger_debug_formatted_json(self, mock_get, mock_debug):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {'result': 'ok'}
+        mock_get.return_value = mock_resp
+
+        client = NuHeat('dummy')
+        client.get_account()
+
+        mock_debug.assert_called_once()
+        log_msg = mock_debug.call_args[0][0]
+        self.assertIn('"result": "ok"', log_msg)
+        self.assertIn("HTTP 200", log_msg)
 
 if __name__ == '__main__':
     unittest.main()

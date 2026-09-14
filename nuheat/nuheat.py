@@ -1,5 +1,13 @@
+import json
+import logging
 import sys
+import time
 import requests
+
+try:
+    from udi_interface import LOGGER
+except ImportError:
+    LOGGER = logging.getLogger(__name__)
 
 
 class NuHeat:
@@ -7,6 +15,8 @@ class NuHeat:
         self.api_v2_url = "https://api.mynuheat.com/api/v2"
         self.api_v1_url = "https://api.mynuheat.com/api/v1"
         self.api_url = self.api_v2_url
+        self._month_cache = {}
+        self.timeout = 10
 
         if callable(token_or_provider):
             self._token_provider = token_or_provider
@@ -23,6 +33,59 @@ class NuHeat:
 
     def set_access_token(self, token):
         self._token_provider = lambda: str(token) if token else ""
+
+    def _request(self, method: str, url: str, max_retries: int = 2, backoff: float = 2.0, **kwargs):
+        """
+        Executes HTTP requests with timeout, logging, and automatic retry for
+        transient server errors (5xx, timeouts, connection drops).
+        """
+        kwargs.setdefault('headers', self.headers)
+        kwargs.setdefault('timeout', self.timeout)
+
+        last_resp = None
+        for attempt in range(max_retries + 1):
+            try:
+                r = requests.request(method, url, **kwargs)
+                self._log_response(method, url, r)
+                # If server returns 5xx (transient error / server down) and attempts remain, retry
+                if r.status_code >= 500 and attempt < max_retries:
+                    LOGGER.warning(
+                        f"NuHeat API [{method}] {url} returned {r.status_code}. "
+                        f"Retrying in {backoff}s (attempt {attempt + 1}/{max_retries})..."
+                    )
+                    time.sleep(backoff)
+                    continue
+                return r
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as exc:
+                if attempt < max_retries:
+                    LOGGER.warning(
+                        f"NuHeat API [{method}] {url} failed with {exc.__class__.__name__}. "
+                        f"Retrying in {backoff}s (attempt {attempt + 1}/{max_retries})..."
+                    )
+                    time.sleep(backoff)
+                else:
+                    LOGGER.error(f"NuHeat API [{method}] {url} failed after {max_retries + 1} attempts: {exc}")
+                    raise
+            except requests.exceptions.RequestException as exc:
+                LOGGER.error(f"NuHeat API [{method}] {url} request error: {exc}")
+                raise
+
+        return last_resp
+
+    def _log_response(self, method: str, url: str, r: requests.Response):
+        """Log HTTP response details and nicely formatted JSON using LOGGER.debug."""
+        status_code = getattr(r, 'status_code', 'unknown')
+        try:
+            body = r.json()
+            if isinstance(body, (dict, list)):
+                formatted = json.dumps(body, indent=2)
+                LOGGER.debug(f"NuHeat API [{method}] {url} -> HTTP {status_code}:\n{formatted}")
+                return
+        except Exception:
+            pass
+
+        text = getattr(r, 'text', '') or "(empty body)"
+        LOGGER.debug(f"NuHeat API [{method}] {url} -> HTTP {status_code}:\n{text}")
 
     def _normalize_thermostat(self, stat):
         """
@@ -60,7 +123,7 @@ class NuHeat:
         return json_celsius
 
     def nuheat_celsius_to_json(self, celsius):
-        json_celsius = int(celsius) * 100
+        json_celsius = round(float(celsius) * 100)
         return json_celsius
 
     def nuheat_celsius_to_normal(self, json_celsius):
@@ -72,15 +135,17 @@ class NuHeat:
         return usd
 
     def get_account(self):
+        url = self.api_v2_url + "/Account"
         try:
-            r = requests.get(self.api_v2_url + "/Account", headers=self.headers)
+            r = requests.get(url, headers=self.headers)
+            self._log_response("GET", url, r)
             if r.status_code == requests.codes.ok:
                 return r.json()
             else:
-                print("get_account Error: " + str(r.status_code) + " - " + str(r.content))
+                LOGGER.error(f"get_account Error: {r.status_code} - {r.content}")
                 return None
         except requests.exceptions.RequestException as e:
-            print("NuHeat.get_account Error: " + str(e))
+            LOGGER.error(f"NuHeat.get_account Error: {e}")
             return None
 
     def get_thermostat(self, serial_number=None):
@@ -90,6 +155,7 @@ class NuHeat:
 
         try:
             r = requests.get(url, headers=self.headers)
+            self._log_response("GET", url, r)
             if r.status_code == requests.codes.ok:
                 resp = r.json()
                 if isinstance(resp, list):
@@ -98,10 +164,10 @@ class NuHeat:
                     return self._normalize_thermostat(resp)
                 return resp
             else:
-                print("get_thermostat Error: " + str(r.status_code) + " - " + str(r.content))
+                LOGGER.error(f"get_thermostat Error: {r.status_code} - {r.content}")
                 return None
         except requests.exceptions.RequestException as e:
-            print("NuHeat.get_thermostat Error: " + str(e))
+            LOGGER.error(f"NuHeat.get_thermostat Error: {e}")
             return None
 
     def set_mode_auto(self, serial_number):
@@ -109,13 +175,14 @@ class NuHeat:
         payload = {'serialNumber': str(serial_number)}
         try:
             r = requests.put(url, headers=self.headers, json=payload)
+            self._log_response("PUT", url, r)
             if r.status_code in (requests.codes.ok, requests.codes.no_content):
                 return True
             else:
-                print("set_mode_auto Error: " + str(r.status_code) + " - " + str(r.content))
+                LOGGER.error(f"set_mode_auto Error: {r.status_code} - {r.content}")
                 return None
         except requests.exceptions.RequestException as e:
-            print("NuHeat.set_mode_auto Error: " + str(e))
+            LOGGER.error(f"NuHeat.set_mode_auto Error: {e}")
             return None
 
     def set_mode_hold(self, serial_number, temperature, hold_until=None, temperature_type=0):
@@ -130,13 +197,14 @@ class NuHeat:
 
         try:
             r = requests.put(url, headers=self.headers, json=payload)
+            self._log_response("PUT", url, r)
             if r.status_code in (requests.codes.ok, requests.codes.no_content):
                 return True
             else:
-                print("set_mode_hold Error: " + str(r.status_code) + " - " + str(r.content))
+                LOGGER.error(f"set_mode_hold Error: {r.status_code} - {r.content}")
                 return None
         except requests.exceptions.RequestException as e:
-            print("NuHeat.set_mode_hold Error: " + str(e))
+            LOGGER.error(f"NuHeat.set_mode_hold Error: {e}")
             return None
 
     def set_mode_manual(self, serial_number, temperature, temperature_type=0):
@@ -149,13 +217,14 @@ class NuHeat:
 
         try:
             r = requests.put(url, headers=self.headers, json=payload)
+            self._log_response("PUT", url, r)
             if r.status_code in (requests.codes.ok, requests.codes.no_content):
                 return True
             else:
-                print("set_mode_manual Error: " + str(r.status_code) + " - " + str(r.content))
+                LOGGER.error(f"set_mode_manual Error: {r.status_code} - {r.content}")
                 return None
         except requests.exceptions.RequestException as e:
-            print("NuHeat.set_mode_manual Error: " + str(e))
+            LOGGER.error(f"NuHeat.set_mode_manual Error: {e}")
             return None
 
     def set_thermostat_setpoint(self, serial_number, setpoint, mode="hold"):
@@ -177,13 +246,21 @@ class NuHeat:
         if not resp or 'energyUsage' not in resp:
             return None
 
+        entries = resp.get('energyUsage')
+        if isinstance(entries, dict):
+            entries = [entries]
+        elif not isinstance(entries, list):
+            return None
+
         minutes = 0
-        raw_energy_kw_hour = 0
-        raw_charge_kw_hour = 0
-        for entry in resp['energyUsage']:
-            minutes += entry.get('minutes', 0)
-            raw_energy_kw_hour += entry.get('energyKWattHour', 0)
-            raw_charge_kw_hour += entry.get('chargeKWattHour', 0)
+        raw_energy_kw_hour = 0.0
+        raw_charge_kw_hour = 0.0
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            minutes += int(entry.get('minutes') or 0)
+            raw_energy_kw_hour += float(entry.get('energyKWattHour') or 0.0)
+            raw_charge_kw_hour += float(entry.get('chargeKWattHour') or 0.0)
 
         energy_kw_hour = round(raw_energy_kw_hour, 2)
         cents_charge_kw_hour = round(raw_charge_kw_hour, 2)
@@ -194,37 +271,139 @@ class NuHeat:
         energy_log_url = self.api_v1_url + "/EnergyLog/Day/" + str(serial_number) + "/" + str(date)
         try:
             r = requests.get(energy_log_url, headers=self.headers)
+            self._log_response("GET", energy_log_url, r)
             if r.status_code == requests.codes.ok:
-                return self._parse_energy_usage(r.json())
+                result = self._parse_energy_usage(r.json())
+                if result:
+                    LOGGER.info(f"NuHeat Day Energy for {serial_number} on {date}: {result[1]} kWh ({result[0]} mins)")
+                return result
             else:
-                print("get_energy_log_day Error: " + str(r.status_code) + " - " + str(r.content))
+                LOGGER.error(f"get_energy_log_day Error: {r.status_code} - {r.content}")
                 return None
         except requests.exceptions.RequestException as e:
-            print("NuHeat.get_energy_log_day Error: " + str(e))
+            LOGGER.error(f"NuHeat.get_energy_log_day Error: {e}")
             return None
 
     def get_energy_log_week(self, serial_number, date):
         energy_log_url = self.api_v1_url + "/EnergyLog/Week/" + str(serial_number) + "/" + str(date)
         try:
             r = requests.get(energy_log_url, headers=self.headers)
+            self._log_response("GET", energy_log_url, r)
             if r.status_code == requests.codes.ok:
-                return self._parse_energy_usage(r.json())
+                result = self._parse_energy_usage(r.json())
+                if result:
+                    LOGGER.info(f"NuHeat Week Energy for {serial_number} up to {date}: {result[1]} kWh ({result[0]} mins)")
+                return result
             else:
-                print("get_energy_log_week Error: " + str(r.status_code) + " - " + str(r.content))
+                LOGGER.error(f"get_energy_log_week Error: {r.status_code} - {r.content}")
                 return None
         except requests.exceptions.RequestException as e:
-            print("NuHeat.get_energy_log_week Error: " + str(e))
+            LOGGER.error(f"NuHeat.get_energy_log_week Error: {e}")
             return None
 
-    def get_energy_log_year(self, serial_number, date):
-        energy_log_url = self.api_v1_url + "/EnergyLog/Month/" + str(serial_number) + "/" + str(date)
+    def _fetch_energy_log_month(self, serial_number, year, force: bool = False):
+        cache_key = (str(serial_number), str(year))
+        now = time.time()
+        if not force and hasattr(self, '_month_cache') and cache_key in self._month_cache:
+            cached_time, cached_json = self._month_cache[cache_key]
+            if now - cached_time < 300:
+                return cached_json
+
+        energy_log_url = self.api_v1_url + "/EnergyLog/Month/" + str(serial_number) + "/" + str(year)
         try:
             r = requests.get(energy_log_url, headers=self.headers)
+            self._log_response("GET", energy_log_url, r)
             if r.status_code == requests.codes.ok:
-                return self._parse_energy_usage(r.json())
+                data = r.json()
+                if not hasattr(self, '_month_cache'):
+                    self._month_cache = {}
+                self._month_cache[cache_key] = (now, data)
+                return data
             else:
-                print("get_energy_log_year Error: " + str(r.status_code) + " - " + str(r.content))
+                LOGGER.error(f"EnergyLog Month Error: {r.status_code} - {r.content}")
                 return None
         except requests.exceptions.RequestException as e:
-            print("NuHeat.get_energy_log_year Error: " + str(e))
+            LOGGER.error(f"NuHeat EnergyLog Month Error: {e}")
             return None
+
+    def get_energy_log_month(self, serial_number, year, month, force: bool = False):
+        resp = self._fetch_energy_log_month(serial_number, year, force=force)
+        if not resp or 'energyUsage' not in resp:
+            return None
+
+        try:
+            m_int = int(month)
+        except (TypeError, ValueError):
+            m_int = 1
+
+        target_1based = {str(m_int), f"{m_int:02d}"}
+        target_0based = {str(m_int - 1), f"{(m_int - 1):02d}"}
+
+        entries = resp.get('energyUsage')
+        if isinstance(entries, dict):
+            entries = [entries]
+        elif not isinstance(entries, list):
+            entries = []
+
+        # 1-based matching (e.g. "9" for September)
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            e_str = str(entry.get('entry', '')).strip()
+            if e_str in target_1based:
+                minutes = int(entry.get('minutes') or 0)
+                raw_kwh = float(entry.get('energyKWattHour') or 0.0)
+                raw_charge = float(entry.get('chargeKWattHour') or 0.0)
+                energy_kw_hour = round(raw_kwh, 2)
+                cents_charge = round(raw_charge, 2)
+                usd_charge = self.nuheat_cents_to_dollars(cents_charge)
+                LOGGER.info(f"NuHeat Month Energy for {serial_number} (Month {month}/{year}): {energy_kw_hour} kWh")
+                return [minutes, energy_kw_hour, usd_charge]
+
+        # Fallback 0-based matching
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            e_str = str(entry.get('entry', '')).strip()
+            if e_str in target_0based:
+                minutes = int(entry.get('minutes') or 0)
+                raw_kwh = float(entry.get('energyKWattHour') or 0.0)
+                raw_charge = float(entry.get('chargeKWattHour') or 0.0)
+                energy_kw_hour = round(raw_kwh, 2)
+                cents_charge = round(raw_charge, 2)
+                usd_charge = self.nuheat_cents_to_dollars(cents_charge)
+                LOGGER.info(f"NuHeat Month Energy for {serial_number} (Month {month}/{year}, 0-based): {energy_kw_hour} kWh")
+                return [minutes, energy_kw_hour, usd_charge]
+
+        LOGGER.warning(f"NuHeat Month {month} not found for {serial_number} in year {year}")
+        return [0, 0.0, 0.0]
+
+    def get_energy_log_year(self, serial_number, year, force: bool = False):
+        resp = self._fetch_energy_log_month(serial_number, year, force=force)
+        if resp is not None:
+            result = self._parse_energy_usage(resp)
+            if result:
+                LOGGER.info(f"NuHeat Year Energy for {serial_number} for {year}: {result[1]} kWh ({result[0]} mins)")
+            return result
+        return None
+
+    def get_energy_summary(self, serial_number, date_str, year_str, month_num, force: bool = False):
+        """
+        Retrieves Day, Week, Month, and Year energy usage and returns a convenient summary dictionary.
+        """
+        day_used = self.get_energy_log_day(serial_number, date_str)
+        week_used = self.get_energy_log_week(serial_number, date_str)
+        month_used = self.get_energy_log_month(serial_number, year_str, month_num, force=force)
+        year_used = self.get_energy_log_year(serial_number, year_str, force=force)
+
+        return {
+            'day': day_used[1] if day_used else 0.0,
+            'week': week_used[1] if week_used else 0.0,
+            'month': month_used[1] if month_used else 0.0,
+            'year': year_used[1] if year_used else 0.0,
+            'day_data': day_used,
+            'week_data': week_used,
+            'month_data': month_used,
+            'year_data': year_used,
+        }
+
