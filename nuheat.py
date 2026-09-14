@@ -6,7 +6,7 @@ import threading
 
 from nodes.base import LOGGER, BaseNode
 
-VERSION = "2.1.4"
+VERSION = "2.1.5"
 
 try:
     import udi_interface
