@@ -51,7 +51,7 @@ The thermostat uses 3 dedicated commands to control operating mode and heating s
 - **Set Hold (`SET_HOLD`)**: Temporary hold with 2 parameters:
   - **Temperature (`temp`)**: Target heating setpoint in configured scale (°F or °C).
   - **Hold Minutes (`hold`)**: Duration in minutes (0–1440). Sets `GV4` to the hold expiration timestamp (Unix epoch timestamp, UOM 151).
-- **Set Permanent Hold (`SET_PERM_HOLD`)**: Manual hold with 1 parameter:
+- **Set Permanent Temp (`SET_PERM_HOLD`)**: Manual hold with 1 parameter:
   - **Temperature (`temp`)**: Target heating setpoint in configured scale (°F or °C) permanently until changed. `GV4` displays as `Permanent Hold`.
 
 ---
@@ -78,7 +78,7 @@ The NodeServer automatically detects your account's preferred temperature scale 
   - **Commands**:
     - **Set Auto (`SET_AUTO`)**: Sets thermostat to follow internal schedule.
     - **Set Hold (`SET_HOLD`)**: Sets temporary hold with target temperature and hold duration in minutes.
-    - **Set Permanent Hold (`SET_PERM_HOLD`)**: Sets permanent manual hold with target temperature.
+    - **Set Permanent Temp (`SET_PERM_HOLD`)**: Sets permanent manual hold with target temperature.
     - **Force Update (`UPDATE`)**: Immediately forces a data update for this thermostat.
   - **Energy Metrics (UOM 33 / kWh)**:
     - **Daily Energy** (`GV0`): Energy used today in kWh.

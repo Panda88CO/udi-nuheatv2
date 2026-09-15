@@ -11,7 +11,6 @@ spec = importlib.util.spec_from_file_location("controller_module", controller_pa
 controller_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(controller_module)
 Controller = controller_module.Controller
-_build_profile_definition = controller_module._build_profile_definition
 
 
 class TestPG3Nodes(unittest.TestCase):
@@ -20,6 +19,7 @@ class TestPG3Nodes(unittest.TestCase):
         self.mock_poly.subscribe = MagicMock()
         self.mock_poly.Notices = {}
         self.mock_poly.addNode = MagicMock()
+        self.mock_poly.updateProfile = MagicMock()
         self.mock_poly.getNodes.return_value = {}
         self.mock_poly.getNode.return_value = None
         self.mock_poly.ADDNODEDONE = 'ADDNODEDONE'
@@ -48,7 +48,8 @@ class TestPG3Nodes(unittest.TestCase):
     def test_controller_custom_params_handler_with_temp_unit(self):
         controller = Controller(self.mock_poly, 'controller', 'controller', 'NuHeat')
         controller.oauth.updateOauthSettings = MagicMock()
-        controller._publish_profile = MagicMock()
+        controller.update_profile = MagicMock()
+        controller._publish_profile = controller.update_profile
 
         # Create mock thermostat node on controller
         mock_stat = MagicMock()
@@ -65,11 +66,12 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertEqual(controller.temp_uom, 4)
         self.assertEqual(mock_stat.temp_uom, 4)
         mock_stat.update_info.assert_called_once()
-        controller._publish_profile.assert_called_once()
+        controller.update_profile.assert_called_once()
 
     def test_controller_custom_params_handler_with_temp_unt(self):
         controller = Controller(self.mock_poly, 'controller', 'controller', 'NuHeat')
-        controller._publish_profile = MagicMock()
+        controller.update_profile = MagicMock()
+        controller._publish_profile = controller.update_profile
 
         params = {
             'tz': 'America/Denver',
@@ -203,7 +205,7 @@ class TestPG3Nodes(unittest.TestCase):
         controller.NuHeat.set_mode_hold.return_value = True
 
         node = ThermostatNode(self.mock_poly, '99887766', '99887766', 'Guest Bath', controller, temp_uom=17)
-        self.assertEqual(node.id, 'THERMOSTAT')
+        self.assertEqual(node.id, 'THERMOSTAT_F')
         node.setDriver = MagicMock()
 
         # Test update_info in Auto mode (CLISPH and GV4 cast to Schedule)
@@ -345,96 +347,128 @@ class TestPG3Nodes(unittest.TestCase):
         year_node.setDriver.assert_any_call('GV0', 5000, uom=45)
         year_node.setDriver.assert_any_call('ST', 104.2, uom=33)
 
-    def test_profile_builder(self):
-        profile_f = _build_profile_definition("F")
-        self.assertIn("delete", profile_f)
-        self.assertEqual(profile_f["delete"], {"editors": ["*"], "nodedefs": ["*"], "linkdefs": ["*"]})
-        self.assertIn("editors", profile_f)
-        self.assertIn("nodedefs", profile_f)
-        self.assertEqual(profile_f["linkdefs"], [])
+    def test_static_profile_files(self):
+        import xml.etree.ElementTree as ET
+        repo_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
-        # Check CLITEMP editor ranges in F mode (only UOM 17 and UOM 25 subset 0,1)
-        clitemp_editor = next(e for e in profile_f["editors"] if e["id"] == "CLITEMP")
-        self.assertEqual(len(clitemp_editor["ranges"]), 2)
-        self.assertEqual(clitemp_editor["ranges"][0]["uom"], "17")
-        self.assertEqual(clitemp_editor["ranges"][1]["uom"], "25")
-        self.assertEqual(clitemp_editor["ranges"][1]["subset"], "0,1")
-        self.assertEqual(clitemp_editor["ranges"][1]["names"], {"0": "Schedule", "1": "Permanent Hold"})
+        # Check version.txt
+        version_path = os.path.join(repo_dir, 'profile', 'version.txt')
+        self.assertTrue(os.path.isfile(version_path))
+        with open(version_path, 'r') as f:
+            v_content = f.read().strip()
+        self.assertEqual(v_content, "2.2.0")
 
-        # Check clitemp_range_input in F mode (only UOM 17, no UOM 25)
-        input_editor_f = next(e for e in profile_f["editors"] if e["id"] == "clitemp_range_input")
-        self.assertEqual(len(input_editor_f["ranges"]), 1)
-        self.assertEqual(input_editor_f["ranges"][0]["uom"], "17")
-        self.assertEqual(input_editor_f["ranges"][0]["min"], 41)
-        self.assertEqual(input_editor_f["ranges"][0]["max"], 104)
+        # Check editors.xml
+        editors_path = os.path.join(repo_dir, 'profile', 'editor', 'editors.xml')
+        self.assertTrue(os.path.isfile(editors_path))
+        tree_editors = ET.parse(editors_path)
+        root_editors = tree_editors.getroot()
+        editor_ids = {e.get('id'): e for e in root_editors.findall('editor')}
 
-        # Check CLITEMP editor ranges in C mode (only UOM 4 and UOM 25 subset 0,1)
-        profile_c = _build_profile_definition("C")
-        clitemp_c = next(e for e in profile_c["editors"] if e["id"] == "CLITEMP")
-        self.assertEqual(len(clitemp_c["ranges"]), 2)
-        self.assertEqual(clitemp_c["ranges"][0]["uom"], "4")
-        self.assertEqual(clitemp_c["ranges"][1]["uom"], "25")
-        self.assertEqual(clitemp_c["ranges"][1]["subset"], "0,1")
-        self.assertEqual(clitemp_c["ranges"][1]["names"], {"0": "Schedule", "1": "Permanent Hold"})
+        # Must have temperature editors for F, C, and their input variants
+        self.assertIn('tempF', editor_ids)
+        self.assertIn('tempF_input', editor_ids)
+        self.assertIn('tempC', editor_ids)
+        self.assertIn('tempC_input', editor_ids)
 
-        # Check clitemp_range_input in C mode (only UOM 4, no UOM 25)
-        input_editor_c = next(e for e in profile_c["editors"] if e["id"] == "clitemp_range_input")
-        self.assertEqual(len(input_editor_c["ranges"]), 1)
-        self.assertEqual(input_editor_c["ranges"][0]["uom"], "4")
-        self.assertEqual(input_editor_c["ranges"][0]["min"], 5)
-        self.assertEqual(input_editor_c["ranges"][0]["max"], 40)
+        temp_f = editor_ids['tempF'].findall('range')
+        self.assertEqual(temp_f[0].get('uom'), '17')
+        self.assertEqual(temp_f[0].get('min'), '41')
+        self.assertEqual(temp_f[0].get('max'), '104')
+        self.assertEqual(temp_f[1].get('uom'), '25')
 
-        # Verify nodedefs include controller and THERMOSTAT
-        nodedef_ids = {nd["id"] for nd in profile_f["nodedefs"]}
-        self.assertEqual(nodedef_ids, {"controller", "THERMOSTAT"})
+        temp_f_in = editor_ids['tempF_input'].findall('range')
+        self.assertEqual(len(temp_f_in), 1)
+        self.assertEqual(temp_f_in[0].get('uom'), '17')
 
-        # Verify THERMOSTAT properties have GV0-GV5
-        thermostat_def = next(nd for nd in profile_f["nodedefs"] if nd["id"] == "THERMOSTAT")
-        prop_map = {p["id"]: p for p in thermostat_def["properties"]}
-        self.assertEqual(prop_map["CLIMD"]["editor"], "MODE_SEL")
-        self.assertEqual(prop_map["GV0"]["name"], "Daily Energy")
-        self.assertEqual(prop_map["GV1"]["name"], "Last 7 Days Energy")
-        self.assertEqual(prop_map["GV2"]["name"], "Monthly Energy")
-        self.assertEqual(prop_map["GV3"]["name"], "Yearly Energy")
-        self.assertEqual(prop_map["GV4"]["name"], "Hold End Time")
-        self.assertEqual(prop_map["GV4"]["editor"], "HOLD_TIME")
-        self.assertEqual(prop_map["GV5"]["name"], "Online")
-        self.assertEqual(prop_map["GV5"]["editor"], "bool")
+        temp_c = editor_ids['tempC'].findall('range')
+        self.assertEqual(temp_c[0].get('uom'), '4')
+        self.assertEqual(temp_c[0].get('min'), '5')
+        self.assertEqual(temp_c[0].get('max'), '40')
+        self.assertEqual(temp_c[1].get('uom'), '25')
 
-        # Verify accepts commands use 'parameters' key
-        cmd_map = {c["id"]: c for c in thermostat_def["cmds"]["accepts"]}
-        self.assertIn("UPDATE", cmd_map)
-        self.assertIn("SET_AUTO", cmd_map)
-        self.assertIn("SET_HOLD", cmd_map)
-        self.assertIn("SET_PERM_HOLD", cmd_map)
-        self.assertNotIn("SET_MODE", cmd_map)
-        self.assertNotIn("CLISPH", cmd_map)
-        self.assertNotIn("CLIMD", cmd_map)
+        temp_c_in = editor_ids['tempC_input'].findall('range')
+        self.assertEqual(len(temp_c_in), 1)
+        self.assertEqual(temp_c_in[0].get('uom'), '4')
 
-        self.assertIn("parameters", cmd_map["SET_HOLD"])
-        self.assertEqual(len(cmd_map["SET_HOLD"]["parameters"]), 2)
-        self.assertEqual(cmd_map["SET_HOLD"]["parameters"][0]["id"], "temp")
-        self.assertEqual(cmd_map["SET_HOLD"]["parameters"][0]["editor"], "clitemp_range_input")
-        self.assertEqual(cmd_map["SET_HOLD"]["parameters"][1]["id"], "hold")
+        # Check nodedefs.xml
+        nodedefs_path = os.path.join(repo_dir, 'profile', 'nodedef', 'nodedefs.xml')
+        self.assertTrue(os.path.isfile(nodedefs_path))
+        tree_nodedefs = ET.parse(nodedefs_path)
+        root_nodedefs = tree_nodedefs.getroot()
+        nodedef_map = {nd.get('id'): nd for nd in root_nodedefs.findall('nodeDef')}
 
-        self.assertIn("parameters", cmd_map["SET_PERM_HOLD"])
-        self.assertEqual(len(cmd_map["SET_PERM_HOLD"]["parameters"]), 1)
-        self.assertEqual(cmd_map["SET_PERM_HOLD"]["parameters"][0]["id"], "temp")
-        self.assertEqual(cmd_map["SET_PERM_HOLD"]["parameters"][0]["editor"], "clitemp_range_input")
+        self.assertIn('controller', nodedef_map)
+        self.assertIn('THERMOSTAT_F', nodedef_map)
+        self.assertIn('THERMOSTAT_C', nodedef_map)
 
-        self.assertNotIn("parameters", cmd_map["SET_AUTO"])
+        # Verify THERMOSTAT_F uses tempF and tempF_input
+        sts_f = {st.get('id'): st.get('editor') for st in nodedef_map['THERMOSTAT_F'].find('sts').findall('st')}
+        self.assertEqual(sts_f['ST'], 'tempF')
+        self.assertEqual(sts_f['CLISPH'], 'tempF')
 
-        # Verify controller sends DON and DOF
-        # Verify controller accepts UPDATE and sends DON and DOF
-        controller_def = next(nd for nd in profile_f["nodedefs"] if nd["id"] == "controller")
-        controller_accepts = {c["id"] for c in controller_def["cmds"]["accepts"]}
-        self.assertEqual(controller_accepts, {"UPDATE"})
-        sends_ids = {s["id"] for s in controller_def["cmds"]["sends"]}
-        self.assertEqual(sends_ids, {"DON", "DOF"})
+        # Verify THERMOSTAT_C uses tempC and tempC_input
+        sts_c = {st.get('id'): st.get('editor') for st in nodedef_map['THERMOSTAT_C'].find('sts').findall('st')}
+        self.assertEqual(sts_c['ST'], 'tempC')
+        self.assertEqual(sts_c['CLISPH'], 'tempC')
 
-        for nd in profile_f["nodedefs"]:
-            prop_ids = {p["id"] for p in nd["properties"]}
-            self.assertIn("TIME", prop_ids, f"Node {nd['id']} missing TIME property")
+        # Check en_us.txt
+        nls_path = os.path.join(repo_dir, 'profile', 'nls', 'en_us.txt')
+        self.assertTrue(os.path.isfile(nls_path))
+        with open(nls_path, 'r') as f:
+            nls_content = f.read()
+        self.assertIn('ND-THERMOSTAT_F-NAME', nls_content)
+        self.assertIn('ND-THERMOSTAT_C-NAME', nls_content)
+        self.assertIn('HOLD_NAMES-0 = Schedule', nls_content)
+        self.assertIn('HOLD_NAMES-1 = Permanent Hold', nls_content)
+
+    def test_thermostat_subclasses_f_and_c(self):
+        node_f = ThermostatNode_F(self.mock_poly, '112233', '112233', 'Test F')
+        self.assertEqual(node_f.id, 'THERMOSTAT_F')
+        self.assertEqual(node_f.temp_uom, 17)
+        self.assertEqual(node_f.drivers[0]['uom'], 17)
+        self.assertEqual(node_f.drivers[1]['uom'], 17)
+
+        node_c = ThermostatNode_C(self.mock_poly, '445566', '445566', 'Test C')
+        self.assertEqual(node_c.id, 'THERMOSTAT_C')
+        self.assertEqual(node_c.temp_uom, 4)
+        self.assertEqual(node_c.drivers[0]['uom'], 4)
+        self.assertEqual(node_c.drivers[1]['uom'], 4)
+
+    def test_controller_serial_1_by_1_node_creation(self):
+        controller = Controller(self.mock_poly, 'controller', 'controller', 'NuHeat')
+        controller.get_access_token = MagicMock(return_value='valid_token')
+        controller.NuHeat.get_account = MagicMock(return_value={'temperatureScale': 'Fahrenheit'})
+        controller.NuHeat.get_thermostat = MagicMock(return_value=[
+            {'serialNumber': '101', 'name': 'Stat 1', 'currentTemperature': 2000, 'setPointTemperature': 2100, 'mode': 1, 'isHeating': False},
+            {'serialNumber': '102', 'name': 'Stat 2', 'currentTemperature': 2200, 'setPointTemperature': 2300, 'mode': 1, 'isHeating': False}
+        ])
+        controller.NuHeat.get_energy_log_day = MagicMock(return_value=[60, 1.0, 0.1])
+        controller.NuHeat.get_energy_log_week = MagicMock(return_value=[420, 7.0, 1.0])
+        controller.NuHeat.get_energy_log_month = MagicMock(return_value=[1800, 30.0, 4.0])
+        controller.NuHeat.get_energy_log_year = MagicMock(return_value=[5000, 100.0, 15.0])
+
+        order_of_ops = []
+
+        original_add_node = self.mock_poly.addNode
+        def mock_add(node):
+            order_of_ops.append(('addNode', node.address))
+            # Simulate PG3 acknowledging the node
+            controller.node_done(node)
+        self.mock_poly.addNode = MagicMock(side_effect=mock_add)
+
+        wait_spy = MagicMock(side_effect=lambda addr, timeout=10.0: (order_of_ops.append(('waitConfirmed', addr)), True)[1])
+        controller._wait_for_node_confirmed = wait_spy
+
+        controller.discover()
+
+        # Verify that node 101 was added AND waited for confirmation BEFORE node 102 was added
+        self.assertEqual(order_of_ops, [
+            ('addNode', '101'),
+            ('waitConfirmed', '101'),
+            ('addNode', '102'),
+            ('waitConfirmed', '102')
+        ])
 
     def test_controller_update_nodes(self):
         controller = Controller(self.mock_poly, 'controller', 'controller', 'NuHeat')

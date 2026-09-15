@@ -6,7 +6,7 @@ import threading
 
 from nodes.base import LOGGER, BaseNode
 
-VERSION = "2.1.8"
+VERSION = "2.2.0"
 
 try:
     import udi_interface
@@ -56,7 +56,7 @@ from nodes import EnergyLogWeekNode
 from nodes import EnergyLogYearNode
 from nuheat import NuHeat
 
-
+'''
 def _build_profile_definition(temp_unit: str = "F") -> dict:
     """Build the dynamic JSON profile definition for PG3/PG3x.
 
@@ -226,7 +226,7 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
         "linkdefs": [],
     }
 
-
+'''
 class Controller(BaseNode):
     id = 'controller'
     drivers = [
@@ -268,6 +268,9 @@ class Controller(BaseNode):
         # Confirmation tracking
         self._confirmed_node_addresses = set()
         self._deleted_node_addresses = set()
+        self._node_confirmed_events = {}
+        self._node_deleted_events = {}
+        self.temp_unit_ready = False
 
         # Thread synchronization flags
         self.customParam_done = False
@@ -302,6 +305,9 @@ class Controller(BaseNode):
             address = node.get("address") or node.get("node")
         if address:
             self._confirmed_node_addresses.add(address)
+            evt = self._node_confirmed_events.get(address)
+            if evt:
+                evt.set()
         LOGGER.debug(f"[node_done] Node {address or 'unknown'} is done")
 
     def node_deleted(self, node):
@@ -311,6 +317,9 @@ class Controller(BaseNode):
         if address:
             self._deleted_node_addresses.add(address)
             self._confirmed_node_addresses.discard(address)
+            evt = self._node_deleted_events.get(address)
+            if evt:
+                evt.set()
         LOGGER.debug(f"[node_deleted] Node {address or 'unknown'} deletion complete")
 
     def _wait_for_node_confirmed(self, address: str, timeout: float = 10.0) -> bool:
@@ -319,83 +328,86 @@ class Controller(BaseNode):
             LOGGER.debug(f"[_wait_for_node_confirmed] Node {address} already confirmed")
             return True
 
-        event = threading.Event()
+        if not hasattr(self.poly, 'subscribe') or not hasattr(self.poly, 'ADDNODEDONE'):
+            return True
 
-        def _handler(node):
-            node_addr = getattr(node, "address", None)
-            if node_addr is None and isinstance(node, dict):
-                node_addr = node.get("address") or node.get("node")
-            if node_addr == address:
-                event.set()
+        evt = self._node_confirmed_events.setdefault(address, threading.Event())
+        if address in self._confirmed_node_addresses:
+            return True
 
-        if hasattr(self.poly, 'subscribe') and hasattr(self.poly, 'ADDNODEDONE'):
-            self.poly.subscribe(self.poly.ADDNODEDONE, _handler)
-            if address in self._confirmed_node_addresses:
-                if hasattr(self.poly, 'unsubscribe'):
-                    self.poly.unsubscribe(self.poly.ADDNODEDONE, _handler)
-                LOGGER.debug(f"[_wait_for_node_confirmed] Node {address} confirmed before local wait")
-                return True
-            confirmed = event.wait(timeout=timeout)
-            if hasattr(self.poly, 'unsubscribe'):
-                self.poly.unsubscribe(self.poly.ADDNODEDONE, _handler)
-            if not confirmed:
-                LOGGER.warning(f"[_wait_for_node_confirmed] Timeout waiting for PG3 to confirm node {address}")
-            else:
-                LOGGER.debug(f"[_wait_for_node_confirmed] PG3 confirmed node {address}")
-            return confirmed
-        return True
+        confirmed = evt.wait(timeout=timeout)
+        if not confirmed:
+            LOGGER.warning(f"[_wait_for_node_confirmed] Timeout waiting for PG3 to confirm node {address}")
+        else:
+            LOGGER.debug(f"[_wait_for_node_confirmed] PG3 confirmed node {address}")
+        return confirmed
 
-    def _profiles_match(self, current_profile, expected_profile) -> bool:
-        if not isinstance(current_profile, dict) or not isinstance(expected_profile, dict):
-            return False
-        return all(
-            current_profile.get(k, []) == expected_profile.get(k, [])
-            for k in ("editors", "nodedefs", "linkdefs")
-        )
+    def _wait_for_node_deleted(self, address: str, timeout: float = 5.0) -> bool:
+        """Block until PG3 sends DELNODEDONE for *address*, or timeout expires."""
+        if address in self._deleted_node_addresses:
+            LOGGER.debug(f"[_wait_for_node_deleted] Node {address} already deleted")
+            return True
+
+        if not hasattr(self.poly, 'subscribe') or not hasattr(self.poly, 'DELNODEDONE'):
+            return True
+
+        evt = self._node_deleted_events.setdefault(address, threading.Event())
+        if address in self._deleted_node_addresses:
+            return True
+
+        deleted = evt.wait(timeout=timeout)
+        if not deleted:
+            LOGGER.warning(f"[_wait_for_node_deleted] Timeout waiting for PG3 to confirm deletion of node {address}")
+        else:
+            LOGGER.debug(f"[_wait_for_node_deleted] PG3 confirmed node {address} deleted")
+        return deleted
+
+    def update_profile(self) -> None:
+        """Update ISY profile using static profile files in profile/."""
+        if hasattr(self.poly, "updateProfile"):
+            try:
+                LOGGER.info("Updating profile from static profile directory...")
+                self.poly.updateProfile()
+                if hasattr(self.poly, "Notices") and hasattr(self.poly.Notices, "delete"):
+                    self.poly.Notices.delete("profile")
+            except Exception as err:
+                LOGGER.error(f"Static profile update failed: {err}")
+                if hasattr(self.poly, "Notices") and hasattr(self.poly.Notices, "__setitem__"):
+                    self.poly.Notices["profile"] = f"Profile update failed: {err}"
 
     def _publish_profile(self, wait_response: bool = False) -> None:
-        update_json_profile = getattr(self.poly, "updateJsonProfile", None)
-        if not callable(update_json_profile):
-            LOGGER.info("[_publish_profile] updateJsonProfile is unavailable, falling back to updateProfile")
-            if hasattr(self.poly, "updateProfile"):
-                self.poly.updateProfile()
-            return
+        """Backwards compatibility alias for update_profile."""
+        self.update_profile()
 
-        profile = _build_profile_definition(self.temp_unit)
-
-        current_profile_getter = getattr(self.poly, "getJsonProfile", None)
-        if callable(current_profile_getter):
-            try:
-                current_profile = current_profile_getter({"waitResponse": False})
-                if self._profiles_match(current_profile, profile):
-                    LOGGER.info("[_publish_profile] Profile already up to date, skipping publish")
-                    return
-            except TypeError:
+    def _determine_temp_unit(self) -> str:
+        """Determine temperature scale ('F' or 'C') from customParams or NuHeat account API."""
+        configured_unit = self.get_configured_temp_unit()
+        if configured_unit:
+            self.temp_unit = configured_unit
+            self.temp_uom = 4 if configured_unit == 'C' else 17
+            self.temp_unit_ready = True
+        else:
+            token = self.get_access_token()
+            if token:
                 try:
-                    current_profile = current_profile_getter()
-                    if self._profiles_match(current_profile, profile):
-                        LOGGER.info("[_publish_profile] Profile already up to date, skipping publish")
-                        return
-                except Exception as err:
-                    LOGGER.warning(f"[_publish_profile] Unable to read existing profile: {err}")
-            except Exception as err:
-                LOGGER.warning(f"[_publish_profile] Unable to read existing profile: {err}")
-
-        try:
-            LOGGER.debug(f"[_publish_profile] Publishing profile: {json.dumps(profile, sort_keys=True, indent=2)}")
-            update_json_profile(profile, {"waitResponse": wait_response})
-            LOGGER.info("[_publish_profile] Dynamic JSON profile published successfully")
-            if hasattr(self.poly, "Notices") and hasattr(self.poly.Notices, "delete"):
-                self.poly.Notices.delete("profile")
-        except TypeError:
-            update_json_profile(profile)
-            LOGGER.info("[_publish_profile] Dynamic JSON profile published successfully")
-            if hasattr(self.poly, "Notices") and hasattr(self.poly.Notices, "delete"):
-                self.poly.Notices.delete("profile")
-        except Exception as err:
-            LOGGER.error(f"[_publish_profile] Profile publish failed: {err}")
-            if hasattr(self.poly, "Notices") and hasattr(self.poly.Notices, "__setitem__"):
-                self.poly.Notices["profile"] = f"Dynamic profile publish failed: {err}"
+                    account_info = self.NuHeat.get_account()
+                    if account_info:
+                        self.temperature_scale = account_info.get('temperatureScale', 'Fahrenheit')
+                        if str(self.temperature_scale).lower().startswith('c'):
+                            self.temp_unit = "C"
+                            self.temp_uom = 4
+                        else:
+                            self.temp_unit = "F"
+                            self.temp_uom = 17
+                        self.temp_unit_ready = True
+                except Exception as e:
+                    LOGGER.warning(f"Could not retrieve NuHeat account temperature scale: {e}")
+            if not self.temp_unit_ready:
+                self.temp_unit = "F"
+                self.temp_uom = 17
+                self.temp_unit_ready = True
+        LOGGER.info(f"Temperature unit determined: {self.temp_unit} (UOM {self.temp_uom})")
+        return self.temp_unit
 
     def get_access_token(self):
         try:
@@ -558,24 +570,30 @@ class Controller(BaseNode):
         if configured_unit:
             self.temp_unit = configured_unit
             self.temp_uom = 4 if configured_unit == 'C' else 17
+            self.temp_unit_ready = True
         else:
             # Pre-populate temp_unit so it displays in PG3 Custom Configuration Parameters
             self.customParams['temp_unit'] = 'F'
             self.temp_unit = 'F'
             self.temp_uom = 17
+            self.temp_unit_ready = True
 
         if self.temp_unit != prev_temp_unit:
-            self._publish_profile()
-            get_nodes = getattr(self.poly, 'getNodes', None)
-            nodes = get_nodes() if callable(get_nodes) else getattr(self, 'nodes', {})
-            nodes_iterable = nodes.values() if isinstance(nodes, dict) else nodes
-            for node in nodes_iterable:
-                if hasattr(node, 'temp_uom'):
-                    node.temp_uom = self.temp_uom
-                    if hasattr(node, 'update_info'):
-                        node.update_info()
-                    if hasattr(node, 'update_energy'):
-                        node.update_energy()
+            self.update_profile()
+            if self.disco == 1:
+                LOGGER.info(f"Temperature unit changed from {prev_temp_unit} to {self.temp_unit}; re-discovering nodes...")
+                self.discover()
+            else:
+                get_nodes = getattr(self.poly, 'getNodes', None)
+                nodes = get_nodes() if callable(get_nodes) else getattr(self, 'nodes', {})
+                nodes_iterable = nodes.values() if isinstance(nodes, dict) else nodes
+                for node in nodes_iterable:
+                    if hasattr(node, 'temp_uom'):
+                        node.temp_uom = self.temp_uom
+                        if hasattr(node, 'update_info'):
+                            node.update_info()
+                        if hasattr(node, 'update_energy'):
+                            node.update_energy()
 
         self.update_oauth_config()
         self.handleCustomParamsDone = True
@@ -599,7 +617,7 @@ class Controller(BaseNode):
         self.update_oauth_config()
         self.setDriver('ST', 1, uom=2)
         self.setDriver('TIME', int(time.time()), uom=151)
-        self._publish_profile()
+        self.update_profile()
 
         if not self.is_oauth_configured():
             LOGGER.warning("NuHeat OAuth credentials (clientId & clientSecret) are missing. Please configure them in PG3.")
@@ -613,6 +631,8 @@ class Controller(BaseNode):
         if token:
             if hasattr(self.Notices, 'delete'):
                 self.Notices.delete('auth')
+            # Wait to determine temperature unit before creating nodes
+            self._determine_temp_unit()
             self.discover()
             self.longPoll()
         else:
@@ -671,21 +691,8 @@ class Controller(BaseNode):
         if hasattr(self.Notices, 'delete'):
             self.Notices.delete('auth')
 
-        configured_unit = self.get_configured_temp_unit()
-        if not configured_unit:
-            account_info = self.NuHeat.get_account()
-            if account_info:
-                self.temperature_scale = account_info.get('temperatureScale', 'Fahrenheit')
-                if self.temperature_scale.lower().startswith('c'):
-                    self.temp_unit = "C"
-                    self.temp_uom = 4
-                else:
-                    self.temp_unit = "F"
-                    self.temp_uom = 17
-            else:
-                self.temp_unit = "F"
-                self.temp_uom = 17
-            self._publish_profile()
+        # Wait and ensure temperature unit is resolved before creating nodes
+        self._determine_temp_unit()
 
         thermostats = self.NuHeat.get_thermostat()
         if not thermostats:
@@ -695,6 +702,13 @@ class Controller(BaseNode):
         if isinstance(thermostats, dict):
             thermostats = [thermostats]
 
+        target_node_cls = ThermostatNode_C if self.temp_unit == 'C' else ThermostatNode_F
+        target_node_id = target_node_cls.id
+
+        add_node = getattr(self.poly, 'addNode', getattr(self, 'addNode', None))
+        if not callable(add_node):
+            return
+
         for stat in thermostats:
             stat_address = str(stat['serialNumber'])
             name = stat.get('name') or f"NuHeat {stat_address}"
@@ -702,13 +716,7 @@ class Controller(BaseNode):
             energy_log_week_address = "elw" + stat_address
             energy_log_year_address = "ely" + stat_address
 
-            add_node = getattr(self.poly, 'addNode', getattr(self, 'addNode', None))
-            if not callable(add_node):
-                continue
-
-            # In ISY, child nodes require their parent (primaryNode) to be a primary node (address == primary).
-            # If the thermostat was previously registered with primaryNode='controller', remove it first
-            # so it can be cleanly recreated as a primary node.
+            # Check existing node
             existing_node = None
             if hasattr(self.poly, '_nodes') and isinstance(self.poly._nodes, dict):
                 existing_node = self.poly._nodes.get(stat_address)
@@ -717,21 +725,37 @@ class Controller(BaseNode):
             elif existing_node is None and hasattr(self, 'nodes') and isinstance(self.nodes, dict):
                 existing_node = self.nodes.get(stat_address)
 
+            needs_deletion = False
             if existing_node is not None:
                 current_primary = None
                 if isinstance(existing_node, dict):
                     current_primary = existing_node.get('primaryNode') or existing_node.get('primary')
+                    existing_id = existing_node.get('nodeDefId') or existing_node.get('id')
                 else:
                     current_primary = getattr(existing_node, 'primary', None) or getattr(existing_node, 'primaryNode', None)
+                    existing_id = getattr(existing_node, 'id', None)
 
-                if current_primary and current_primary != stat_address:
-                    LOGGER.info(f"Node {stat_address} currently has parent '{current_primary}'. Removing so it can be created as primary node...")
-                    if hasattr(self.poly, 'delNode'):
-                        self.poly.delNode(stat_address)
-                        time.sleep(1)
+                if (current_primary and current_primary != stat_address) or (existing_id and existing_id != target_node_id):
+                    LOGGER.info(
+                        f"Node {stat_address} requires recreation (existing id={existing_id}, target={target_node_id}, "
+                        f"primary={current_primary}). Deleting before recreation..."
+                    )
+                    needs_deletion = True
 
-            stat_node = ThermostatNode(self.poly, stat_address, stat_address, name, self, temp_uom=self.temp_uom)
+            if needs_deletion and hasattr(self.poly, 'delNode'):
+                self._confirmed_node_addresses.discard(stat_address)
+                self.poly.delNode(stat_address)
+                self._wait_for_node_deleted(stat_address, timeout=5.0)
+
+            stat_node = target_node_cls(self.poly, stat_address, stat_address, name, self, temp_uom=self.temp_uom)
+            LOGGER.info(f"Adding thermostat node {stat_address} ({name}) as {stat_node.id}...")
             add_node(stat_node)
+
+            # Wait for PG3 confirmation of this node serially (1 by 1)
+            confirmed = self._wait_for_node_confirmed(stat_address, timeout=10.0)
+            if not confirmed:
+                LOGGER.warning(f"Timeout waiting for PG3 confirmation of node {stat_address}; proceeding.")
+
             try:
                 stat_node.update_info()
                 stat_node.update_energy()
@@ -752,6 +776,7 @@ class Controller(BaseNode):
                     LOGGER.info(f"Removing legacy child node {child_addr} from PG3...")
                     if hasattr(self.poly, 'delNode'):
                         self.poly.delNode(child_addr)
+                        self._wait_for_node_deleted(child_addr, timeout=3.0)
 
         self.disco = 1
 

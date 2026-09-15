@@ -38,15 +38,15 @@ The thermostat uses 3 dedicated commands to control operating mode and heating s
 - **Set Hold (`SET_HOLD`)**: Temporary hold with 2 parameters:
   - **Temperature (`temp`)**: Target heating setpoint in °F or °C.
   - **Hold Minutes (`hold`)**: Duration in minutes (0–1440). Sets `GV4` to the hold expiration timestamp (Unix epoch timestamp, UOM 151).
-- **Set Permanent Hold (`SET_PERM_HOLD`)**: Manual hold with 1 parameter:
+- **Set Permanent Temp (`SET_PERM_HOLD`)**: Manual hold with 1 parameter:
   - **Temperature (`temp`)**: Target heating setpoint in °F or °C indefinitely. `GV4` displays as `Permanent Hold`.
 
 ---
 
 ## 4. Discovered Nodes
 
-For each thermostat discovered on your account, a single unified primary node is created:
-1. **Controller Node**:
+For each thermostat discovered on your account, nodes are created serially 1-by-1 with PG3 confirmation:
+1. **Controller Node** (`controller`):
    - **Status Drivers**:
      - NodeServer Online (`ST` — Online / Offline, UOM 2)
      - Last Update (`TIME` — timestamp, UOM 151)
@@ -54,7 +54,7 @@ For each thermostat discovered on your account, a single unified primary node is
    - **Commands**:
      - **Update (`UPDATE`)**: Immediately force updates all nodes and energy logs.
 
-2. **Thermostat Node** (`°F` or `°C` selected based on your `temp_unit` configuration or NuHeat account preferences).
+2. **Thermostat Node** (`THERMOSTAT_F` for Fahrenheit [UOM 17] or `THERMOSTAT_C` for Celsius [UOM 4], determined during startup):
    - **Status Drivers**:
      - Current Temperature (`ST`)
      - Heat Setpoint (`CLISPH` — displays `Schedule` in Auto mode)
@@ -70,5 +70,5 @@ For each thermostat discovered on your account, a single unified primary node is
    - **Commands**:
      - **Set Auto (`SET_AUTO`)**: Sets thermostat to follow internal schedule.
      - **Set Hold (`SET_HOLD`)**: Sets temporary hold with target temperature and hold duration in minutes.
-     - **Set Permanent Hold (`SET_PERM_HOLD`)**: Sets permanent manual hold with target temperature.
+     - **Set Permanent Temp (`SET_PERM_HOLD`)**: Sets permanent manual hold with target temperature.
      - **Force Update (`UPDATE`)**: Immediately force updates thermostat status.

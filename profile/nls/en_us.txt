@@ -1,0 +1,49 @@
+# Controller Node
+ND-controller-NAME = NuHeat Signature Controller
+ND-controller-ICON = Thermostat
+ST-ctl-ST-NAME = NodeServer Online
+ST-ctl-TIME-NAME = Last Update
+CMD-ctl-UPDATE-NAME = Update
+CMD-ctl-DON-NAME = On
+CMD-ctl-DOF-NAME = Off
+
+# Thermostat Node (Fahrenheit & Celsius)
+ND-THERMOSTAT_F-NAME = Thermostat Node
+ND-THERMOSTAT_F-ICON = Thermostat
+ND-THERMOSTAT_C-NAME = Thermostat Node
+ND-THERMOSTAT_C-ICON = Thermostat
+
+ST-TSTAT-ST-NAME = Current Temperature
+ST-TSTAT-CLISPH-NAME = Heat Setpoint
+ST-TSTAT-CLIMD-NAME = Mode
+ST-TSTAT-CLIHCS-NAME = Heat State
+ST-TSTAT-GV0-NAME = Daily Energy
+ST-TSTAT-GV1-NAME = Last 7 Days Energy
+ST-TSTAT-GV2-NAME = Monthly Energy
+ST-TSTAT-GV3-NAME = Yearly Energy
+ST-TSTAT-GV4-NAME = Hold End Time
+ST-TSTAT-GV5-NAME = Online
+ST-TSTAT-TIME-NAME = Last Update
+
+CMD-TSTAT-UPDATE-NAME = Force Update
+CMD-TSTAT-SET_AUTO-NAME = Set Auto
+CMD-TSTAT-SET_HOLD-NAME = Set Hold
+CMDP-TSTAT-SET_HOLD-temp-NAME = Temperature
+CMDP-TSTAT-SET_HOLD-hold-NAME = Hold Minutes
+CMD-TSTAT-SET_PERM_HOLD-NAME = Set Permanent Temp
+CMDP-TSTAT-SET_PERM_HOLD-temp-NAME = Temperature
+
+# Discrete Value Subsets
+BOOL-0 = Offline
+BOOL-1 = Online
+
+CLIHCS-0 = Idle
+CLIHCS-1 = Heating
+
+MODE-1 = Auto
+MODE-2 = Hold
+MODE-3 = Permanent Hold
+
+HOLD_NAMES-0 = Schedule
+HOLD_NAMES-1 = Permanent Hold
+

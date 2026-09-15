@@ -24,7 +24,7 @@ except ImportError:
                     self.primary = primary
                     self.address = address
                     self.name = name
-                    self.drivers = []
+                    self.drivers = [dict(d) for d in getattr(self.__class__, 'drivers', [])]
 
                 def setDriver(self, driver, value, report=True, force=False, uom=None):
                     for d in self.drivers:

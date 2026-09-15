@@ -1,0 +1,84 @@
+<nodeDefs>
+  <!-- Controller Node Definition -->
+  <nodeDef id="controller" nls="ctl">
+    <editors />
+    <sts>
+      <st id="ST" editor="bool" />
+      <st id="TIME" editor="timestamp" />
+    </sts>
+    <cmds>
+      <sends>
+        <cmd id="DON" />
+        <cmd id="DOF" />
+      </sends>
+      <accepts>
+        <cmd id="UPDATE" />
+      </accepts>
+    </cmds>
+  </nodeDef>
+
+  <!-- Thermostat Node Definition (Fahrenheit) -->
+  <nodeDef id="THERMOSTAT_F" nls="TSTAT">
+    <editors />
+    <sts>
+      <st id="ST" editor="tempF" />
+      <st id="CLISPH" editor="tempF" />
+      <st id="CLIMD" editor="MODE_SEL" />
+      <st id="CLIHCS" editor="CLIHCS" />
+      <st id="GV0" editor="TPW" />
+      <st id="GV1" editor="TPW" />
+      <st id="GV2" editor="TPW" />
+      <st id="GV3" editor="TPW" />
+      <st id="GV4" editor="HOLD_TIME" />
+      <st id="GV5" editor="bool" />
+      <st id="TIME" editor="timestamp" />
+    </sts>
+    <cmds>
+      <sends />
+      <accepts>
+        <cmd id="UPDATE" />
+        <cmd id="SET_AUTO" />
+        <cmd id="SET_HOLD">
+          <p id="temp" editor="tempF_input" init="CLISPH" />
+          <p id="hold" editor="HOLD_MINS" />
+        </cmd>
+        <cmd id="SET_PERM_HOLD">
+          <p id="temp" editor="tempF_input" init="CLISPH" />
+        </cmd>
+      </accepts>
+    </cmds>
+  </nodeDef>
+
+  <!-- Thermostat Node Definition (Celsius) -->
+  <nodeDef id="THERMOSTAT_C" nls="TSTAT">
+    <editors />
+    <sts>
+      <st id="ST" editor="tempC" />
+      <st id="CLISPH" editor="tempC" />
+      <st id="CLIMD" editor="MODE_SEL" />
+      <st id="CLIHCS" editor="CLIHCS" />
+      <st id="GV0" editor="TPW" />
+      <st id="GV1" editor="TPW" />
+      <st id="GV2" editor="TPW" />
+      <st id="GV3" editor="TPW" />
+      <st id="GV4" editor="HOLD_TIME" />
+      <st id="GV5" editor="bool" />
+      <st id="TIME" editor="timestamp" />
+    </sts>
+    <cmds>
+      <sends />
+      <accepts>
+        <cmd id="UPDATE" />
+        <cmd id="SET_AUTO" />
+        <cmd id="SET_HOLD">
+          <p id="temp" editor="tempC_input" init="CLISPH" />
+          <p id="hold" editor="HOLD_MINS" />
+        </cmd>
+        <cmd id="SET_PERM_HOLD">
+          <p id="temp" editor="tempC_input" init="CLISPH" />
+        </cmd>
+      </accepts>
+    </cmds>
+  </nodeDef>
+</nodeDefs>
+

@@ -21,7 +21,7 @@ def _get_param(command, param_name, default=None):
 
 
 class ThermostatNode(BaseNode):
-    id = 'THERMOSTAT'
+    id = 'THERMOSTAT_F'
 
     drivers = [
         {'driver': 'ST', 'value': 0, 'uom': 17},
@@ -50,6 +50,22 @@ class ThermostatNode(BaseNode):
             self.temp_uom = int(controller.temp_uom)
         else:
             self.temp_uom = 17
+
+        if self.temp_uom == 4 and getattr(self, 'id', None) == 'THERMOSTAT_F':
+            self.id = 'THERMOSTAT_C'
+            self.drivers = [
+                {'driver': 'ST', 'value': 0, 'uom': 4},
+                {'driver': 'CLISPH', 'value': 0, 'uom': 4},
+                {'driver': 'CLIMD', 'value': 1, 'uom': 25},
+                {'driver': 'CLIHCS', 'value': 0, 'uom': 66},
+                {'driver': 'GV0', 'value': 0, 'uom': 33},
+                {'driver': 'GV1', 'value': 0, 'uom': 33},
+                {'driver': 'GV2', 'value': 0, 'uom': 33},
+                {'driver': 'GV3', 'value': 0, 'uom': 33},
+                {'driver': 'GV4', 'value': 0, 'uom': 25},
+                {'driver': 'GV5', 'value': 1, 'uom': 2},
+                {'driver': 'TIME', 'value': 0, 'uom': 151}
+            ]
 
     def start(self):
         self.update_info()
@@ -300,6 +316,42 @@ class ThermostatNode(BaseNode):
     }
 
 
-# Backwards compatibility aliases
-ThermostatNode_F = ThermostatNode
-ThermostatNode_C = ThermostatNode
+class ThermostatNode_F(ThermostatNode):
+    id = 'THERMOSTAT_F'
+    drivers = [
+        {'driver': 'ST', 'value': 0, 'uom': 17},
+        {'driver': 'CLISPH', 'value': 0, 'uom': 17},
+        {'driver': 'CLIMD', 'value': 1, 'uom': 25},
+        {'driver': 'CLIHCS', 'value': 0, 'uom': 66},
+        {'driver': 'GV0', 'value': 0, 'uom': 33},
+        {'driver': 'GV1', 'value': 0, 'uom': 33},
+        {'driver': 'GV2', 'value': 0, 'uom': 33},
+        {'driver': 'GV3', 'value': 0, 'uom': 33},
+        {'driver': 'GV4', 'value': 0, 'uom': 25},
+        {'driver': 'GV5', 'value': 1, 'uom': 2},
+        {'driver': 'TIME', 'value': 0, 'uom': 151}
+    ]
+
+    def __init__(self, polyglot, primary, address, name, controller=None, temp_uom=17):
+        super(ThermostatNode_F, self).__init__(polyglot, primary, address, name, controller=controller, temp_uom=17)
+
+
+class ThermostatNode_C(ThermostatNode):
+    id = 'THERMOSTAT_C'
+    drivers = [
+        {'driver': 'ST', 'value': 0, 'uom': 4},
+        {'driver': 'CLISPH', 'value': 0, 'uom': 4},
+        {'driver': 'CLIMD', 'value': 1, 'uom': 25},
+        {'driver': 'CLIHCS', 'value': 0, 'uom': 66},
+        {'driver': 'GV0', 'value': 0, 'uom': 33},
+        {'driver': 'GV1', 'value': 0, 'uom': 33},
+        {'driver': 'GV2', 'value': 0, 'uom': 33},
+        {'driver': 'GV3', 'value': 0, 'uom': 33},
+        {'driver': 'GV4', 'value': 0, 'uom': 25},
+        {'driver': 'GV5', 'value': 1, 'uom': 2},
+        {'driver': 'TIME', 'value': 0, 'uom': 151}
+    ]
+
+    def __init__(self, polyglot, primary, address, name, controller=None, temp_uom=4):
+        super(ThermostatNode_C, self).__init__(polyglot, primary, address, name, controller=controller, temp_uom=4)
+
