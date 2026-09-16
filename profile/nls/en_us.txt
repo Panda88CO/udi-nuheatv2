@@ -28,10 +28,10 @@ ST-TSTAT-TIME-NAME = Last Update
 CMD-TSTAT-UPDATE-NAME = Force Update
 CMD-TSTAT-SET_AUTO-NAME = Set Auto
 CMD-TSTAT-SET_HOLD-NAME = Set Hold
-CMDP-TSTAT-SET_HOLD-temp-NAME = Temperature
-CMDP-TSTAT-SET_HOLD-hold-NAME = Hold Minutes
+CMDP-SET_HOLD-temp-NAME = Temperature
+CMDP-SET_HOLD-hold-NAME = Hold Minutes
 CMD-TSTAT-SET_PERM_HOLD-NAME = Set Permanent Temp
-CMDP-TSTAT-SET_PERM_HOLD-temp-NAME = Temperature
+CMDP-SET_PERM_HOLD-temp-NAME = Temperature
 
 # Discrete Value Subsets
 BOOL-0 = Offline
