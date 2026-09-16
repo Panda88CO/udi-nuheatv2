@@ -173,16 +173,18 @@ class NuHeat:
     def set_mode_auto(self, serial_number):
         url = self.api_v2_url + "/Mode/Auto"
         payload = {'serialNumber': str(serial_number)}
+        LOGGER.info(f"Setting thermostat {serial_number} to Auto mode (URL: {url}, payload: {payload})")
         try:
             r = requests.put(url, headers=self.headers, json=payload)
             self._log_response("PUT", url, r)
             if r.status_code in (requests.codes.ok, requests.codes.no_content):
+                LOGGER.info(f"Successfully set thermostat {serial_number} to Auto mode (HTTP {r.status_code})")
                 return True
             else:
-                LOGGER.error(f"set_mode_auto Error: {r.status_code} - {r.content}")
+                LOGGER.error(f"set_mode_auto Error for {serial_number}: {r.status_code} - {r.content}")
                 return None
         except requests.exceptions.RequestException as e:
-            LOGGER.error(f"NuHeat.set_mode_auto Error: {e}")
+            LOGGER.error(f"NuHeat.set_mode_auto RequestException for {serial_number}: {e}")
             return None
 
     def set_mode_hold(self, serial_number, temperature, hold_until=None, temperature_type=0):
@@ -195,16 +197,18 @@ class NuHeat:
         if hold_until:
             payload['holdUntil'] = hold_until
 
+        LOGGER.info(f"Setting thermostat {serial_number} to Hold mode (URL: {url}, temp: {temperature}, hold_until: {hold_until}, payload: {payload})")
         try:
             r = requests.put(url, headers=self.headers, json=payload)
             self._log_response("PUT", url, r)
             if r.status_code in (requests.codes.ok, requests.codes.no_content):
+                LOGGER.info(f"Successfully set thermostat {serial_number} to Hold mode (HTTP {r.status_code})")
                 return True
             else:
-                LOGGER.error(f"set_mode_hold Error: {r.status_code} - {r.content}")
+                LOGGER.error(f"set_mode_hold Error for {serial_number}: {r.status_code} - {r.content}")
                 return None
         except requests.exceptions.RequestException as e:
-            LOGGER.error(f"NuHeat.set_mode_hold Error: {e}")
+            LOGGER.error(f"NuHeat.set_mode_hold RequestException for {serial_number}: {e}")
             return None
 
     def set_mode_manual(self, serial_number, temperature, temperature_type=0):
@@ -215,16 +219,18 @@ class NuHeat:
             'temperatureType': int(temperature_type)
         }
 
+        LOGGER.info(f"Setting thermostat {serial_number} to Permanent Hold / Manual mode (URL: {url}, temp: {temperature}, payload: {payload})")
         try:
             r = requests.put(url, headers=self.headers, json=payload)
             self._log_response("PUT", url, r)
             if r.status_code in (requests.codes.ok, requests.codes.no_content):
+                LOGGER.info(f"Successfully set thermostat {serial_number} to Permanent Hold / Manual mode (HTTP {r.status_code})")
                 return True
             else:
-                LOGGER.error(f"set_mode_manual Error: {r.status_code} - {r.content}")
+                LOGGER.error(f"set_mode_manual Error for {serial_number}: {r.status_code} - {r.content}")
                 return None
         except requests.exceptions.RequestException as e:
-            LOGGER.error(f"NuHeat.set_mode_manual Error: {e}")
+            LOGGER.error(f"NuHeat.set_mode_manual RequestException for {serial_number}: {e}")
             return None
 
     def set_thermostat_setpoint(self, serial_number, setpoint, mode="hold"):
@@ -235,6 +241,7 @@ class NuHeat:
         - "manual": set_mode_manual
         - "auto": set_mode_auto
         """
+        LOGGER.info(f"set_thermostat_setpoint called for {serial_number} (setpoint: {setpoint}, mode: '{mode}')")
         if mode == "auto":
             return self.set_mode_auto(serial_number)
         elif mode == "manual":
