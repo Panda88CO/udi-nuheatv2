@@ -28,8 +28,10 @@ ST-TSTAT-TIME-NAME = Last Update
 CMD-TSTAT-UPDATE-NAME = Force Update
 CMD-TSTAT-SET_AUTO-NAME = Set Auto
 CMD-TSTAT-SET_HOLD-NAME = Set Hold
-CMDP-temp_hold-NAME = Hold Temperature
-CMDP-temp_perm-NAME = Permanent Temperature
+CMDP-tempholdC-NAME = Hold Temperature
+CMDP-tempholdF-NAME = Hold Temperature
+CMDP-temppermC-NAME = Permanent Temperature
+CMDP-temppermF-NAME = Permanent Temperature
 CMDP-hold-NAME = Hold Minutes
 CMD-TSTAT-SET_PERM_HOLD-NAME = Set Permanent Temp
 
