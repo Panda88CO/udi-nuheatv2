@@ -39,11 +39,11 @@
         <cmd id="UPDATE" />
         <cmd id="SET_AUTO" />
         <cmd id="SET_HOLD">
-          <p id="temp" editor="tempF_input" init="CLISPH" />
+          <p id="temp_hold" editor="tempF_input" init="CLISPH" />
           <p id="hold" editor="HOLD_MINS" />
         </cmd>
         <cmd id="SET_PERM_HOLD">
-          <p id="temp" editor="tempF_input" init="CLISPH" />
+          <p id="temp_perm" editor="tempF_input" init="CLISPH" />
         </cmd>
       </accepts>
     </cmds>
