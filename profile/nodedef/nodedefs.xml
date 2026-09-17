@@ -21,7 +21,7 @@
   <nodeDef id="THERMOSTAT_F" nls="TSTAT">
     <editors />
     <sts>
-      <st id="ST" editor="tempF" />
+      <st id="ST" editor="tempF_input" />
       <st id="CLISPH" editor="tempF" />
       <st id="CLIMD" editor="MODE_SEL" />
       <st id="CLIHCS" editor="CLIHCS" />
@@ -53,7 +53,7 @@
   <nodeDef id="THERMOSTAT_C" nls="TSTAT">
     <editors />
     <sts>
-      <st id="ST" editor="tempC" />
+      <st id="ST" editor="tempC_input" />
       <st id="CLISPH" editor="tempC" />
       <st id="CLIMD" editor="MODE_SEL" />
       <st id="CLIHCS" editor="CLIHCS" />
