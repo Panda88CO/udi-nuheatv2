@@ -237,6 +237,17 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertEqual(len(gv4_calls), 1)
         self.assertGreater(gv4_calls[0][0][1], int(time.time()))
 
+        # Test SET_PERM_HOLD with temppermF.uom17 (from nodedefs.xml)
+        node.set_permanent_hold({'query': {'temppermF.uom17': '41'}})
+        controller.NuHeat.set_mode_manual.assert_called_with('99887766', 500)
+        node.setDriver.assert_any_call('CLISPH', 41.0, uom=17)
+
+        # Test SET_HOLD with tempholdF.uom17 (from nodedefs.xml)
+        node.set_hold({'query': {'tempholdF.uom17': '42', 'hold.uom45': '6'}})
+        call_args = controller.NuHeat.set_mode_hold.call_args[0]
+        self.assertEqual(call_args[1], 556)
+        node.setDriver.assert_any_call('CLISPH', 42.0, uom=17)
+
         # Test update_info with holdUntil parses timestamp
         controller.NuHeat.get_thermostat.return_value = {
             'serialNumber': '99887766',
@@ -308,6 +319,11 @@ class TestPG3Nodes(unittest.TestCase):
         node.setDriver.assert_any_call('CLIHCS', 0, uom=66)
         node.setDriver.assert_any_call('GV4', 1, uom=25)
         node.setDriver.assert_any_call('GV5', 0, uom=2)
+
+        # Test SET_PERM_HOLD with temppermC.uom4 (from nodedefs.xml)
+        node.set_permanent_hold({'query': {'temppermC.uom4': '21'}})
+        controller.NuHeat.set_mode_manual.assert_called_with('99887766', 2100)
+        node.setDriver.assert_any_call('CLISPH', 21.0, uom=4)
 
     def test_energy_log_day_node(self):
         controller = MagicMock()

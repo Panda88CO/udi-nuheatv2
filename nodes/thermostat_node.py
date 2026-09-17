@@ -15,8 +15,15 @@ def _get_param(command, param_name, default=None):
         for k, v in query.items():
             if k.startswith(f"{param_name}."):
                 return v
+            if param_name == "temp" and "temp" in k.lower():
+                return v
     if param_name in command:
         return command[param_name]
+    for k, v in command.items():
+        if k.startswith(f"{param_name}."):
+            return v
+        if param_name == "temp" and "temp" in k.lower():
+            return v
     return default
 
 
