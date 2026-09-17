@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NuHeat NodeServer Configuration (PG3 / PG3x)</title>
+  <style>
+    :root {
+      --color-bg: #ffffff;
+      --color-fg: #1f2328;
+      --color-muted: #656d76;
+      --color-border: #d0d7de;
+      --color-code-bg: #f6f8fa;
+      --color-link: #0969da;
+      --color-accent-border: #0969da;
+      --color-note-bg: #ddf4ff;
+      --color-note-border: #54aeff;
+      --color-table-row: #f6f8fa;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --color-bg: #0d1117;
+        --color-fg: #e6edf3;
+        --color-muted: #848d97;
+        --color-border: #30363d;
+        --color-code-bg: #161b22;
+        --color-link: #2f81f7;
+        --color-accent-border: #1f6feb;
+        --color-note-bg: #0c2d6b;
+        --color-note-border: #1f6feb;
+        --color-table-row: #161b22;
+      }
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+      font-size: 16px;
+      line-height: 1.5;
+      color: var(--color-fg);
+      background-color: var(--color-bg);
+      margin: 0;
+      padding: 32px;
+    }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 24px;
+      margin-bottom: 16px;
+      font-weight: 600;
+      line-height: 1.25;
+    }
+    h1 {
+      font-size: 2em;
+      padding-bottom: 0.3em;
+      border-bottom: 1px solid var(--color-border);
+    }
+    h2 {
+      font-size: 1.5em;
+      padding-bottom: 0.3em;
+      border-bottom: 1px solid var(--color-border);
+    }
+    h3 {
+      font-size: 1.25em;
+    }
+    p, ul, ol, table, blockquote {
+      margin-top: 0;
+      margin-bottom: 16px;
+    }
+    ul, ol {
+      padding-left: 2em;
+    }
+    li + li {
+      margin-top: 0.25em;
+    }
+    hr {
+      height: 0.25em;
+      padding: 0;
+      margin: 24px 0;
+      background-color: var(--color-border);
+      border: 0;
+    }
+    a {
+      color: var(--color-link);
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    code {
+      padding: 0.2em 0.4em;
+      margin: 0;
+      font-size: 85%;
+      white-space: break-spaces;
+      background-color: var(--color-code-bg);
+      border-radius: 6px;
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    }
+    table {
+      border-spacing: 0;
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 16px;
+      margin-bottom: 16px;
+    }
+    table th, table td {
+      padding: 8px 13px;
+      border: 1px solid var(--color-border);
+    }
+    table th {
+      font-weight: 600;
+      background-color: var(--color-code-bg);
+    }
+    table tr:nth-child(2n) {
+      background-color: var(--color-table-row);
+    }
+    .alert {
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      border-left: 4px solid var(--color-note-border);
+      background-color: var(--color-note-bg);
+      border-radius: 4px;
+    }
+    .alert-title {
+      font-weight: 600;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .alert p:last-child {
+      margin-bottom: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>NuHeat NodeServer Configuration (PG3 / PG3x)</h1>
+    <p>This NodeServer connects Universal Devices controllers (eisy / Polisy) to <strong>NuHeat Signature</strong> radiant floor heating thermostats via the official NuHeat Cloud API and OAuth 2.0.</p>
+
+    <hr>
+
+    <h2>1. Custom Configuration Parameters</h2>
+    <p>In your PG3/PG3x NodeServer dashboard, configure the following keys under <strong>Configuration</strong> &rarr; <strong>Custom Configuration Parameters</strong>:</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="text-align: left;">Key</th>
+          <th style="text-align: left;">Type</th>
+          <th style="text-align: left;">Description</th>
+          <th style="text-align: left;">Default</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>tz</code></td>
+          <td>string</td>
+          <td>Your local tz database timezone name (Required for accurate energy log timestamps)</td>
+          <td><code>America/New_York</code></td>
+        </tr>
+        <tr>
+          <td><code>temp_unit</code></td>
+          <td>string</td>
+          <td>Temperature unit: <code>F</code> for Fahrenheit (UOM 17) or <code>C</code> for Celsius (UOM 4)</td>
+          <td><code>F</code></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p><em>A complete list of timezone names can be found in the <a href="https://en.wikipedia.org/wiki/List_of_tz_database_time_zones" target="_blank" rel="noopener noreferrer">tz database time zones list</a> (e.g., <code>America/New_York</code>, <code>America/Chicago</code>, <code>America/Denver</code>, <code>America/Los_Angeles</code>).</em></p>
+
+    <div class="alert">
+      <div class="alert-title">NOTE</div>
+      <p>Client ID and Client Secret can be provided either via PG3's OAuth configuration setup or entered directly into <strong>Custom Configuration Parameters</strong> (<code>clientId</code> and <code>clientSecret</code>).</p>
+    </div>
+
+    <hr>
+
+    <h2>2. Authentication Steps</h2>
+    <ol>
+      <li>Configure <code>tz</code> and <code>temp_unit</code> (<code>F</code> or <code>C</code>) in <strong>Custom Configuration Parameters</strong> and click <strong>Save</strong>.</li>
+      <li>When the OAuth configuration is loaded in PG3, click the <strong>Authenticate</strong> button in the PG3 NodeServer details page.</li>
+      <li>Log into your <strong><a href="https://mynuheat.com" target="_blank" rel="noopener noreferrer">My NuHeat</a></strong> account in the browser window and approve access.</li>
+      <li>Once authorized, the NodeServer will automatically discover your thermostats and create the corresponding nodes in your Admin Console.</li>
+    </ol>
+
+    <hr>
+
+    <h2>3. Operating Mode &amp; Setpoint Control</h2>
+    <p>The thermostat uses 3 dedicated commands to control operating mode and heating setpoint:</p>
+    <ul>
+      <li><strong>Set Auto (<code>SET_AUTO</code>)</strong>: Follows internal schedule. Takes no parameters. Setpoint (<code>CLISPH</code>) and Hold End Time (<code>GV4</code>) display as <code>Schedule</code>.</li>
+      <li><strong>Set Hold (<code>SET_HOLD</code>)</strong>: Temporary hold with 2 parameters:
+        <ul>
+          <li><strong>Temperature (<code>temp</code>)</strong>: Target heating setpoint in &deg;F or &deg;C.</li>
+          <li><strong>Hold Minutes (<code>hold</code>)</strong>: Duration in minutes (0&ndash;1440). Sets <code>GV4</code> to the hold expiration timestamp (Unix epoch timestamp, UOM 151).</li>
+        </ul>
+      </li>
+      <li><strong>Set Permanent Temp (<code>SET_PERM_HOLD</code>)</strong>: Manual hold with 1 parameter:
+        <ul>
+          <li><strong>Temperature (<code>temp</code>)</strong>: Target heating setpoint in &deg;F or &deg;C indefinitely. <code>GV4</code> displays as <code>Permanent Hold</code>.</li>
+        </ul>
+      </li>
+    </ul>
+
+    <hr>
+
+    <h2>4. Discovered Nodes</h2>
+    <p>For each thermostat discovered on your account, nodes are created serially 1-by-1 with PG3 confirmation:</p>
+    <ol>
+      <li><strong>Controller Node</strong> (<code>controller</code>):
+        <ul>
+          <li><strong>Status Drivers</strong>:
+            <ul>
+              <li>NodeServer Online (<code>ST</code> &mdash; Online / Offline, UOM 2)</li>
+              <li>Last Update (<code>TIME</code> &mdash; timestamp, UOM 151)</li>
+            </ul>
+          </li>
+          <li><strong>Heartbeat</strong>: Toggles <code>DON</code> / <code>DOF</code> on each short poll.</li>
+          <li><strong>Commands</strong>:
+            <ul>
+              <li><strong>Update (<code>UPDATE</code>)</strong>: Immediately force updates all nodes and energy logs.</li>
+            </ul>
+          </li>
+        </ul>
+      </li>
+      <li><strong>Thermostat Node</strong> (<code>THERMOSTAT_F</code> for Fahrenheit [UOM 17] or <code>THERMOSTAT_C</code> for Celsius [UOM 4], determined during startup):
+        <ul>
+          <li><strong>Status Drivers</strong>:
+            <ul>
+              <li>Current Temperature (<code>ST</code>)</li>
+              <li>Heat Setpoint (<code>CLISPH</code> &mdash; displays <code>Schedule</code> in Auto mode)</li>
+              <li>Operating Mode (<code>CLIMD</code> &mdash; Auto, Hold, Permanent Hold)</li>
+              <li>Heat State (<code>CLIHCS</code> &mdash; Idle, Heating)</li>
+              <li>Hold End Time (<code>GV4</code> &mdash; displays expiration timestamp [UOM 151] on Hold; displays <code>Permanent Hold</code> in Permanent Hold mode, and <code>Schedule</code> in Auto mode)</li>
+              <li>Online Status (<code>GV5</code> &mdash; Online / Offline, UOM 2)</li>
+              <li>Last Update (<code>TIME</code> &mdash; timestamp, UOM 151)</li>
+              <li>Daily Energy (<code>GV0</code> &mdash; kWh, UOM 33)</li>
+              <li>Last 7 Days Energy (<code>GV1</code> &mdash; kWh, UOM 33)</li>
+              <li>Monthly Energy (<code>GV2</code> &mdash; kWh, UOM 33)</li>
+              <li>Yearly Energy (<code>GV3</code> &mdash; kWh, UOM 33)</li>
+            </ul>
+          </li>
+          <li><strong>Commands</strong>:
+            <ul>
+              <li><strong>Set Auto (<code>SET_AUTO</code>)</strong>: Sets thermostat to follow internal schedule.</li>
+              <li><strong>Set Hold (<code>SET_HOLD</code>)</strong>: Sets temporary hold with target temperature and hold duration in minutes.</li>
+              <li><strong>Set Permanent Temp (<code>SET_PERM_HOLD</code>)</strong>: Sets permanent manual hold with target temperature.</li>
+              <li><strong>Force Update (<code>UPDATE</code>)</strong>: Immediately force updates thermostat status.</li>
+            </ul>
+          </li>
+        </ul>
+      </li>
+    </ol>
+  </div>
+</body>
+</html>
+
