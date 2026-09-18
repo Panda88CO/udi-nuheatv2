@@ -16,39 +16,39 @@
 
   <!-- Temperature Fahrenheit (Display & Driver) -->
   <editor id="tempF">
-    <range uom="17" min="41" max="104" step="1" prec="0" />
+    <range uom="17" min="41" max="104" prec="0" />
   </editor>
 
   <!-- Temperature Fahrenheit (Command Input) -->
   <editor id="tempF_input">
-    <range uom="17" min="41" max="104" step="1" prec="0" />
+    <range uom="17" min="41" max="104" step="1" />
   </editor>
 
   <!-- Temperature Celsius (Display & Driver) -->
   <editor id="tempC">
-    <range uom="4" min="5" max="40" step="1" prec="0" />
+    <range uom="4" min="5" max="40" prec="0" />
   </editor>
 
   <!-- Temperature Celsius (Command Input) -->
   <editor id="tempC_input">
-    <range uom="4" min="5" max="40" step="1" prec="0" />
+    <range uom="4" min="5" max="40" step="1" />
   </editor>
 
   <!-- Aliases for backwards compatibility / alternative editor references -->
   <editor id="CLITEMP_F">
-    <range uom="17" min="41" max="104" step="1" prec="0" />
+    <range uom="17" min="41" max="104" prec="0" />
   </editor>
 
   <editor id="CLITEMP_F_INPUT">
-    <range uom="17" min="41" max="104" step="1" prec="0" />
+    <range uom="17" min="41" max="104" step="1" />
   </editor>
 
   <editor id="CLITEMP_C">
-    <range uom="4" min="5" max="40" step="1" prec="0" />
+    <range uom="4" min="5" max="40" prec="0" />
   </editor>
 
   <editor id="CLITEMP_C_INPUT">
-    <range uom="4" min="5" max="40" step="1" prec="0" />
+    <range uom="4" min="5" max="40" step="1" />
   </editor>
 
   <!-- Hold End Time (Unix timestamp or special state) -->
@@ -59,7 +59,7 @@
 
   <!-- Hold Duration Minutes -->
   <editor id="HOLD_MINS">
-    <range uom="45" min="0" max="1440" step="1" prec="0" />
+    <range uom="45" min="0" max="1440" step="1" />
   </editor>
 
   <!-- Power / Energy (kWh) -->

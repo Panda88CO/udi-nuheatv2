@@ -237,8 +237,8 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertEqual(len(gv4_calls), 1)
         self.assertGreater(gv4_calls[0][0][1], int(time.time()))
 
-        # Test SET_PERM_HOLD with temppermF.uom17 (from nodedefs.xml)
-        node.set_permanent_hold({'query': {'temppermF.uom17': '41'}})
+        # Test SET_PERM_HOLD with empty parameter id (id="" -> .uom17 from nodedefs.xml)
+        node.set_permanent_hold({'query': {'.uom17': '41'}})
         controller.NuHeat.set_mode_manual.assert_called_with('99887766', 500)
         node.setDriver.assert_any_call('CLISPH', 41.0, uom=17)
 
@@ -319,8 +319,8 @@ class TestPG3Nodes(unittest.TestCase):
         node.setDriver.assert_any_call('GV4', 1, uom=25)
         node.setDriver.assert_any_call('GV5', 0, uom=2)
 
-        # Test SET_PERM_HOLD with temppermC.uom4 (from nodedefs.xml)
-        node.set_permanent_hold({'query': {'temppermC.uom4': '21'}})
+        # Test SET_PERM_HOLD with empty parameter id (id="" -> .uom4 from nodedefs.xml)
+        node.set_permanent_hold({'query': {'.uom4': '21'}})
         controller.NuHeat.set_mode_manual.assert_called_with('99887766', 2100)
         node.setDriver.assert_any_call('CLISPH', 21.0, uom=4)
 
@@ -406,6 +406,21 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertEqual(len(temp_c_in), 1)
         self.assertEqual(temp_c_in[0].get('uom'), '4')
 
+        # Verify tempF and tempC do not have step, while tempF_input and tempC_input have step="1"
+        self.assertIsNone(temp_f[0].get('step'))
+        self.assertEqual(temp_f_in[0].get('step'), '1')
+        self.assertIsNone(temp_c[0].get('step'))
+        self.assertEqual(temp_c_in[0].get('step'), '1')
+
+        # Verify inputs do not have prec, while non-input display editors have prec="0"
+        self.assertEqual(temp_f[0].get('prec'), '0')
+        self.assertIsNone(temp_f_in[0].get('prec'))
+        self.assertEqual(temp_c[0].get('prec'), '0')
+        self.assertIsNone(temp_c_in[0].get('prec'))
+        hold_mins = editor_ids['HOLD_MINS'].findall('range')
+        self.assertEqual(hold_mins[0].get('step'), '1')
+        self.assertIsNone(hold_mins[0].get('prec'))
+
         # Check nodedefs.xml
         nodedefs_path = os.path.join(repo_dir, 'profile', 'nodedef', 'nodedefs.xml')
         self.assertTrue(os.path.isfile(nodedefs_path))
@@ -417,15 +432,15 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertIn('THERMOSTAT_F', nodedef_map)
         self.assertIn('THERMOSTAT_C', nodedef_map)
 
-        # Verify THERMOSTAT_F uses tempF_input
+        # Verify THERMOSTAT_F uses non-input editor tempF
         sts_f = {st.get('id'): st.get('editor') for st in nodedef_map['THERMOSTAT_F'].find('sts').findall('st')}
-        self.assertEqual(sts_f['ST'], 'tempF_input')
-        self.assertEqual(sts_f['CLISPH'], 'tempF_input')
+        self.assertEqual(sts_f['ST'], 'tempF')
+        self.assertEqual(sts_f['CLISPH'], 'tempF')
 
-        # Verify THERMOSTAT_C uses tempC_input
+        # Verify THERMOSTAT_C uses non-input editor tempC
         sts_c = {st.get('id'): st.get('editor') for st in nodedef_map['THERMOSTAT_C'].find('sts').findall('st')}
-        self.assertEqual(sts_c['ST'], 'tempC_input')
-        self.assertEqual(sts_c['CLISPH'], 'tempC_input')
+        self.assertEqual(sts_c['ST'], 'tempC')
+        self.assertEqual(sts_c['CLISPH'], 'tempC')
 
         # Check en_us.txt
         nls_path = os.path.join(repo_dir, 'profile', 'nls', 'en_us.txt')

@@ -12,14 +12,23 @@ def _get_param(command, param_name, default=None):
     if isinstance(query, dict):
         if param_name in query:
             return query[param_name]
+        # When command parameter id in nodedefs.xml is empty (id=""), PG3 passes query keys like '' or '.uom17'
+        if "" in query:
+            return query[""]
         for k, v in query.items():
+            if k.startswith(".uom") or k.startswith("uom"):
+                return v
             if k.startswith(f"{param_name}."):
                 return v
             if param_name == "temp" and "temp" in k.lower():
                 return v
     if param_name in command:
         return command[param_name]
+    if "" in command:
+        return command[""]
     for k, v in command.items():
+        if k.startswith(".uom") or k.startswith("uom"):
+            return v
         if k.startswith(f"{param_name}."):
             return v
         if param_name == "temp" and "temp" in k.lower():

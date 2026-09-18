@@ -21,8 +21,8 @@
   <nodeDef id="THERMOSTAT_F" nls="TSTAT">
     <editors />
     <sts>
-      <st id="ST" editor="tempF_input" />
-      <st id="CLISPH" editor="tempF_input" />
+      <st id="ST" editor="tempF" />
+      <st id="CLISPH" editor="tempF" />
       <st id="CLIMD" editor="MODE_SEL" />
       <st id="CLIHCS" editor="CLIHCS" />
       <st id="GV0" editor="TPW" />
@@ -43,7 +43,7 @@
           <p id="hold" editor="HOLD_MINS" />
         </cmd>
         <cmd id="SET_PERM_HOLD">
-          <p id="temppermF" editor="tempF_input" init="CLISPH" />
+          <p id="" editor="tempF_input" init="CLISPH" />
         </cmd>
       </accepts>
     </cmds>
@@ -53,8 +53,8 @@
   <nodeDef id="THERMOSTAT_C" nls="TSTAT">
     <editors />
     <sts>
-      <st id="ST" editor="tempC_input" />
-      <st id="CLISPH" editor="tempC_input" />
+      <st id="ST" editor="tempC" />
+      <st id="CLISPH" editor="tempC" />
       <st id="CLIMD" editor="MODE_SEL" />
       <st id="CLIHCS" editor="CLIHCS" />
       <st id="GV0" editor="TPW" />
@@ -75,7 +75,7 @@
           <p id="hold" editor="HOLD_MINS" />
         </cmd>
         <cmd id="SET_PERM_HOLD">
-          <p id="temppermC" editor="tempC_input" init="CLISPH" />
+          <p id="" editor="tempC_input" init="CLISPH" />
         </cmd>
       </accepts>
     </cmds>

@@ -64,19 +64,19 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
     """
     if temp_unit == "C":
         clitemp_ranges = [
-            {"uom": "4", "min": 5, "max": 40, "step": 1, "prec": 0},
+            {"uom": "4", "min": 5, "max": 40, "prec": 0},
             {"uom": "25", "subset": "0,1", "names": {"0": "Schedule", "1": "Permanent Hold"}},
         ]
         clitemp_range_input = [
-            {"uom": "4", "min": 5, "max": 40, "step": 1, "prec": 0},
+            {"uom": "4", "min": 5, "max": 40, "step": 1},
         ]
     else:
         clitemp_ranges = [
-            {"uom": "17", "min": 41, "max": 104, "step": 1, "prec": 0},
+            {"uom": "17", "min": 41, "max": 104, "prec": 0},
             {"uom": "25", "subset": "0,1", "names": {"0": "Schedule", "1": "Permanent Hold"}},
         ]
         clitemp_range_input = [
-            {"uom": "17", "min": 41, "max": 104, "step": 1, "prec": 0},
+            {"uom": "17", "min": 41, "max": 104, "step": 1},
         ]
 
     editors = [
@@ -135,7 +135,7 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
         {
             "id": "HOLD_MINS",
             "ranges": [
-                {"uom": "45", "min": 0, "max": 1440, "step": 1, "prec": 0}
+                {"uom": "45", "min": 0, "max": 1440, "step": 1}
             ],
         },
         {
