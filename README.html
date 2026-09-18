@@ -206,7 +206,7 @@
     <h2>Setting Operating Mode &amp; Setpoint</h2>
     <p>The thermostat uses 3 dedicated commands to control operating mode and heating setpoint:</p>
     <ul>
-      <li><strong>Set Auto (<code>SET_AUTO</code>)</strong>: Follows internal schedule. Takes no parameters. Setpoint (<code>CLISPH</code>) and Hold End Time (<code>GV4</code>) display as <code>Schedule</code>.</li>
+      <li><strong>Set Auto (<code>SET_AUTO</code>)</strong>: Follows internal schedule. Takes no parameters. Hold End Time (<code>GV4</code>) displays as <code>Schedule</code> and Setpoint (<code>CLISPH</code>) reflects the scheduled temperature.</li>
       <li><strong>Set Hold (<code>SET_HOLD</code>)</strong>: Temporary hold with 2 parameters:
         <ul>
           <li><strong>Temperature (<code>temp</code>)</strong>: Target heating setpoint in configured scale (&deg;F or &deg;C).</li>
@@ -243,7 +243,7 @@
       </li>
       <li><strong>Thermostat Node (<code>&deg;F</code> or <code>&deg;C</code>)</strong>:
         <ul>
-          <li><strong>Temperature &amp; Setpoint</strong>: Reports current temperature (<code>ST</code>) and target setpoint (<code>CLISPH</code> &mdash; displays <code>Schedule</code> in Auto mode).</li>
+          <li><strong>Temperature &amp; Setpoint</strong>: Reports current temperature (<code>ST</code>) and target heat setpoint (<code>CLISPH</code>).</li>
           <li><strong>Operating Mode (<code>CLIMD</code>)</strong>: Auto, Hold, or Permanent Hold.</li>
           <li><strong>Heat State (<code>CLIHCS</code>)</strong>: Idle or Heating.</li>
           <li><strong>Hold End Time (<code>GV4</code>)</strong>: Displays the hold expiration timestamp (Unix epoch timestamp, UOM 151) when on Hold; displays <code>Permanent Hold</code> in Permanent Hold mode, and <code>Schedule</code> in Auto mode.</li>

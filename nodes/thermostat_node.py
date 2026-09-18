@@ -112,9 +112,9 @@ class ThermostatNode(BaseNode):
             hold_until = stat.get('holdUntil') or stat.get('holdSetPointDateTime')
 
             if mode_val == 1:
-                # Auto (Follow Schedule) - setpoint and hold time are not applicable
+                # Auto (Follow Schedule)
                 self.setDriver('CLIMD', 1, uom=25)
-                self.setDriver('CLISPH', 0, uom=25)
+                self.setDriver('CLISPH', clisph, uom=self.temp_uom)
                 self.setDriver('GV4', 0, uom=25)
             elif mode_val == 2:
                 # Temporary Hold
@@ -213,7 +213,6 @@ class ThermostatNode(BaseNode):
         ok = nuheat_client.set_mode_auto(self.address)
         if ok:
             self.setDriver('CLIMD', 1, uom=25)
-            self.setDriver('CLISPH', 0, uom=25)
             self.setDriver('GV4', 0, uom=25)
             self.setDriver('TIME', int(time.time()), uom=151)
             return True

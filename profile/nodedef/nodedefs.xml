@@ -22,7 +22,7 @@
     <editors />
     <sts>
       <st id="ST" editor="tempF_input" />
-      <st id="CLISPH" editor="tempF" />
+      <st id="CLISPH" editor="tempF_input" />
       <st id="CLIMD" editor="MODE_SEL" />
       <st id="CLIHCS" editor="CLIHCS" />
       <st id="GV0" editor="TPW" />
@@ -54,7 +54,7 @@
     <editors />
     <sts>
       <st id="ST" editor="tempC_input" />
-      <st id="CLISPH" editor="tempC" />
+      <st id="CLISPH" editor="tempC_input" />
       <st id="CLIMD" editor="MODE_SEL" />
       <st id="CLIHCS" editor="CLIHCS" />
       <st id="GV0" editor="TPW" />

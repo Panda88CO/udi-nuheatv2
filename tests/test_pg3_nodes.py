@@ -208,12 +208,12 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertEqual(node.id, 'THERMOSTAT_F')
         node.setDriver = MagicMock()
 
-        # Test update_info in Auto mode (CLISPH and GV4 cast to Schedule)
+        # Test update_info in Auto mode (CLISPH reports active setpoint and GV4 cast to Schedule)
         node.update_info()
         node.setDriver.assert_any_call('ST', 68.0, uom=17)
         node.setDriver.assert_any_call('CLIHCS', 1, uom=66)
         node.setDriver.assert_any_call('CLIMD', 1, uom=25)
-        node.setDriver.assert_any_call('CLISPH', 0, uom=25)
+        node.setDriver.assert_any_call('CLISPH', 69.8, uom=17)
         node.setDriver.assert_any_call('GV4', 0, uom=25)
         node.setDriver.assert_any_call('GV5', 1, uom=2)
 
@@ -265,7 +265,6 @@ class TestPG3Nodes(unittest.TestCase):
         node.set_auto()
         controller.NuHeat.set_mode_auto.assert_called_once_with('99887766')
         node.setDriver.assert_any_call('CLIMD', 1, uom=25)
-        node.setDriver.assert_any_call('CLISPH', 0, uom=25)
         node.setDriver.assert_any_call('GV4', 0, uom=25)
 
         # Test update_energy
@@ -372,7 +371,7 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertTrue(os.path.isfile(version_path))
         with open(version_path, 'r') as f:
             v_content = f.read().strip()
-        self.assertEqual(v_content, "2.2.0")
+        self.assertEqual(v_content, "2.2.7")
 
         # Check editors.xml
         editors_path = os.path.join(repo_dir, 'profile', 'editor', 'editors.xml')
@@ -388,20 +387,20 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertIn('tempC_input', editor_ids)
 
         temp_f = editor_ids['tempF'].findall('range')
+        self.assertEqual(len(temp_f), 1)
         self.assertEqual(temp_f[0].get('uom'), '17')
         self.assertEqual(temp_f[0].get('min'), '41')
         self.assertEqual(temp_f[0].get('max'), '104')
-        self.assertEqual(temp_f[1].get('uom'), '25')
 
         temp_f_in = editor_ids['tempF_input'].findall('range')
         self.assertEqual(len(temp_f_in), 1)
         self.assertEqual(temp_f_in[0].get('uom'), '17')
 
         temp_c = editor_ids['tempC'].findall('range')
+        self.assertEqual(len(temp_c), 1)
         self.assertEqual(temp_c[0].get('uom'), '4')
         self.assertEqual(temp_c[0].get('min'), '5')
         self.assertEqual(temp_c[0].get('max'), '40')
-        self.assertEqual(temp_c[1].get('uom'), '25')
 
         temp_c_in = editor_ids['tempC_input'].findall('range')
         self.assertEqual(len(temp_c_in), 1)
@@ -418,15 +417,15 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertIn('THERMOSTAT_F', nodedef_map)
         self.assertIn('THERMOSTAT_C', nodedef_map)
 
-        # Verify THERMOSTAT_F uses tempF and tempF_input
+        # Verify THERMOSTAT_F uses tempF_input
         sts_f = {st.get('id'): st.get('editor') for st in nodedef_map['THERMOSTAT_F'].find('sts').findall('st')}
-        self.assertEqual(sts_f['ST'], 'tempF')
-        self.assertEqual(sts_f['CLISPH'], 'tempF')
+        self.assertEqual(sts_f['ST'], 'tempF_input')
+        self.assertEqual(sts_f['CLISPH'], 'tempF_input')
 
-        # Verify THERMOSTAT_C uses tempC and tempC_input
+        # Verify THERMOSTAT_C uses tempC_input
         sts_c = {st.get('id'): st.get('editor') for st in nodedef_map['THERMOSTAT_C'].find('sts').findall('st')}
-        self.assertEqual(sts_c['ST'], 'tempC')
-        self.assertEqual(sts_c['CLISPH'], 'tempC')
+        self.assertEqual(sts_c['ST'], 'tempC_input')
+        self.assertEqual(sts_c['CLISPH'], 'tempC_input')
 
         # Check en_us.txt
         nls_path = os.path.join(repo_dir, 'profile', 'nls', 'en_us.txt')

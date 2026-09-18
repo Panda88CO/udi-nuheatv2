@@ -17,7 +17,6 @@
   <!-- Temperature Fahrenheit (Display & Driver) -->
   <editor id="tempF">
     <range uom="17" min="41" max="104" step="1" prec="0" />
-    <range uom="25" subset="0,1" nls="HOLD_NAMES" />
   </editor>
 
   <!-- Temperature Fahrenheit (Command Input) -->
@@ -28,7 +27,6 @@
   <!-- Temperature Celsius (Display & Driver) -->
   <editor id="tempC">
     <range uom="4" min="5" max="40" step="1" prec="0" />
-    <range uom="25" subset="0,1" nls="HOLD_NAMES" />
   </editor>
 
   <!-- Temperature Celsius (Command Input) -->
@@ -39,7 +37,6 @@
   <!-- Aliases for backwards compatibility / alternative editor references -->
   <editor id="CLITEMP_F">
     <range uom="17" min="41" max="104" step="1" prec="0" />
-    <range uom="25" subset="0,1" nls="HOLD_NAMES" />
   </editor>
 
   <editor id="CLITEMP_F_INPUT">
@@ -48,7 +45,6 @@
 
   <editor id="CLITEMP_C">
     <range uom="4" min="5" max="40" step="1" prec="0" />
-    <range uom="25" subset="0,1" nls="HOLD_NAMES" />
   </editor>
 
   <editor id="CLITEMP_C_INPUT">

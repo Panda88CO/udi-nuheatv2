@@ -34,7 +34,7 @@ In your PG3/PG3x NodeServer dashboard, configure the following keys under **Conf
 ## 3. Operating Mode & Setpoint Control
  
 The thermostat uses 3 dedicated commands to control operating mode and heating setpoint:
-- **Set Auto (`SET_AUTO`)**: Follows internal schedule. Takes no parameters. Setpoint (`CLISPH`) and Hold End Time (`GV4`) display as `Schedule`.
+- **Set Auto (`SET_AUTO`)**: Follows internal schedule. Takes no parameters. Hold End Time (`GV4`) displays as `Schedule` and Setpoint (`CLISPH`) reflects the scheduled temperature.
 - **Set Hold (`SET_HOLD`)**: Temporary hold with 2 parameters:
   - **Temperature (`temp`)**: Target heating setpoint in °F or °C.
   - **Hold Minutes (`hold`)**: Duration in minutes (0–1440). Sets `GV4` to the hold expiration timestamp (Unix epoch timestamp, UOM 151).
@@ -57,7 +57,7 @@ For each thermostat discovered on your account, nodes are created serially 1-by-
 2. **Thermostat Node** (`THERMOSTAT_F` for Fahrenheit [UOM 17] or `THERMOSTAT_C` for Celsius [UOM 4], determined during startup):
    - **Status Drivers**:
      - Current Temperature (`ST`)
-     - Heat Setpoint (`CLISPH` — displays `Schedule` in Auto mode)
+     - Heat Setpoint (`CLISPH`)
      - Operating Mode (`CLIMD` — Auto, Hold, Permanent Hold)
      - Heat State (`CLIHCS` — Idle, Heating)
      - Hold End Time (`GV4` — displays expiration timestamp [UOM 151] on Hold; displays `Permanent Hold` in Permanent Hold mode, and `Schedule` in Auto mode)
