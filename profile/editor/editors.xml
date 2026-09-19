@@ -16,22 +16,22 @@
 
   <!-- Temperature Fahrenheit (Display & Driver) -->
   <editor id="tempF">
-    <range uom="17" min="41" max="104" prec="0" />
+    <range uom="17" prec="0" />
   </editor>
 
   <!-- Temperature Fahrenheit (Command Input) -->
   <editor id="tempF_input">
-    <range uom="17" min="41" max="104" step="1" />
+    <range uom="17" min="41" max="104" step="1" prec="0"/>
   </editor>
 
   <!-- Temperature Celsius (Display & Driver) -->
   <editor id="tempC">
-    <range uom="4" min="5" max="40" prec="0" />
+    <range uom="4" prec="0" />
   </editor>
 
   <!-- Temperature Celsius (Command Input) -->
   <editor id="tempC_input">
-    <range uom="4" min="5" max="40" step="1" />
+    <range uom="4" min="5" max="40" step="1" prec="0" />
   </editor>
 
   <!-- Aliases for backwards compatibility / alternative editor references -->
