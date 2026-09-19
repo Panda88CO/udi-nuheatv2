@@ -242,6 +242,11 @@ class TestPG3Nodes(unittest.TestCase):
         controller.NuHeat.set_mode_manual.assert_called_with('99887766', 500)
         node.setDriver.assert_any_call('CLISPH', 41.0, uom=17)
 
+        # Test SET_PERM_HOLD with direct value and uom metadata from PG3 (id="")
+        node.set_permanent_hold({'address': '99887766', 'cmd': 'SET_PERM_HOLD', 'value': '70', 'uom': '17', 'query': {}})
+        controller.NuHeat.set_mode_manual.assert_called_with('99887766', 2111)
+        node.setDriver.assert_any_call('CLISPH', 70.0, uom=17)
+
         # Test SET_HOLD with tempholdF.uom17 (from nodedefs.xml)
         node.set_hold({'query': {'tempholdF.uom17': '42', 'hold.uom45': '6'}})
         call_args = controller.NuHeat.set_mode_hold.call_args[0]
@@ -323,6 +328,25 @@ class TestPG3Nodes(unittest.TestCase):
         node.set_permanent_hold({'query': {'.uom4': '21'}})
         controller.NuHeat.set_mode_manual.assert_called_with('99887766', 2100)
         node.setDriver.assert_any_call('CLISPH', 21.0, uom=4)
+
+        # Test SET_PERM_HOLD with direct value and uom metadata from PG3 (id="") in Celsius
+        node.set_permanent_hold({'address': '99887766', 'cmd': 'SET_PERM_HOLD', 'value': '22', 'uom': '4', 'query': {}})
+        controller.NuHeat.set_mode_manual.assert_called_with('99887766', 2200)
+        node.setDriver.assert_any_call('CLISPH', 22.0, uom=4)
+
+        # Test SET_PERM_HOLD with temppermC.uom4
+        node.set_permanent_hold({'query': {'temppermC.uom4': '20'}})
+        controller.NuHeat.set_mode_manual.assert_called_with('99887766', 2000)
+        node.setDriver.assert_any_call('CLISPH', 20.0, uom=4)
+
+        # Test SET_HOLD with tempholdC.uom4 in Celsius
+        controller.NuHeat.set_mode_hold.return_value = True
+        node.set_hold({'query': {'tempholdC.uom4': '23', 'hold.uom45': '60'}})
+        call_args = controller.NuHeat.set_mode_hold.call_args[0]
+        self.assertEqual(call_args[0], '99887766')
+        self.assertEqual(call_args[1], 2300)
+        node.setDriver.assert_any_call('CLISPH', 23.0, uom=4)
+        node.setDriver.assert_any_call('CLIMD', 2, uom=25)
 
     def test_energy_log_day_node(self):
         controller = MagicMock()

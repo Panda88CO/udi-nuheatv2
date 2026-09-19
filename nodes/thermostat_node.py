@@ -16,7 +16,9 @@ def _get_param(command, param_name, default=None):
         if "" in query:
             return query[""]
         for k, v in query.items():
-            if k.startswith(".uom") or k.startswith("uom"):
+            if k == "uom":
+                continue
+            if k.startswith(".uom"):
                 return v
             if k.startswith(f"{param_name}."):
                 return v
@@ -26,8 +28,13 @@ def _get_param(command, param_name, default=None):
         return command[param_name]
     if "" in command:
         return command[""]
+    # Single-parameter commands (like SET_PERM_HOLD with id="") deliver their parameter in command['value']
+    if param_name == "temp" and "value" in command and command["value"] is not None:
+        return command["value"]
     for k, v in command.items():
-        if k.startswith(".uom") or k.startswith("uom"):
+        if k in ("address", "cmd", "uom", "query", "value"):
+            continue
+        if k.startswith(".uom"):
             return v
         if k.startswith(f"{param_name}."):
             return v
