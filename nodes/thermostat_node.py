@@ -30,7 +30,8 @@ def _get_param(command, param_name, default=None):
         return command[""]
     # Single-parameter commands (like SET_PERM_HOLD with id="") deliver their parameter in command['value']
     if param_name == "temp" and "value" in command and command["value"] is not None:
-        return command["value"]
+        if str(command.get("uom")) != "25" and command.get("cmd") != "CLIMD":
+            return command["value"]
     for k, v in command.items():
         if k in ("address", "cmd", "uom", "query", "value"):
             continue

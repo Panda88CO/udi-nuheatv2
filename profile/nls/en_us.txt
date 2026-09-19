@@ -46,4 +46,3 @@ MODE-3 = Permanent Hold
 
 HOLD_NAMES-0 = Schedule
 HOLD_NAMES-1 = Permanent Hold
-

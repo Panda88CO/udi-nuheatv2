@@ -285,6 +285,7 @@ class TestPG3Nodes(unittest.TestCase):
         node.setDriver.assert_any_call('GV2', 35.50, uom=33)
         node.setDriver.assert_any_call('GV3', 104.20, uom=33)
 
+
         # Test force_update (UPDATE command handler)
         node.reportDrivers = MagicMock()
         node.force_update()
@@ -395,7 +396,7 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertTrue(os.path.isfile(version_path))
         with open(version_path, 'r') as f:
             v_content = f.read().strip()
-        self.assertEqual(v_content, "2.2.7")
+        self.assertEqual(v_content, "2.2.10")
 
         # Check editors.xml
         editors_path = os.path.join(repo_dir, 'profile', 'editor', 'editors.xml')
@@ -436,14 +437,14 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertIsNone(temp_c[0].get('step'))
         self.assertEqual(temp_c_in[0].get('step'), '1')
 
-        # Verify inputs do not have prec, while non-input display editors have prec="0"
+        # Verify inputs and display editors have prec="0"
         self.assertEqual(temp_f[0].get('prec'), '0')
-        self.assertIsNone(temp_f_in[0].get('prec'))
+        self.assertEqual(temp_f_in[0].get('prec'), '0')
         self.assertEqual(temp_c[0].get('prec'), '0')
-        self.assertIsNone(temp_c_in[0].get('prec'))
+        self.assertEqual(temp_c_in[0].get('prec'), '0')
         hold_mins = editor_ids['HOLD_MINS'].findall('range')
         self.assertEqual(hold_mins[0].get('step'), '1')
-        self.assertIsNone(hold_mins[0].get('prec'))
+        self.assertEqual(hold_mins[0].get('prec'), '0')
 
         # Check nodedefs.xml
         nodedefs_path = os.path.join(repo_dir, 'profile', 'nodedef', 'nodedefs.xml')
@@ -461,10 +462,22 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertEqual(sts_f['ST'], 'tempF')
         self.assertEqual(sts_f['CLISPH'], 'tempF')
 
+        # Verify THERMOSTAT_F accepts standard and dedicated commands
+        cmds_f = {cmd.get('id') for cmd in nodedef_map['THERMOSTAT_F'].find('cmds').find('accepts').findall('cmd')}
+        self.assertIn('SET_HOLD', cmds_f)
+        self.assertIn('SET_PERM_HOLD', cmds_f)
+        self.assertIn('SET_AUTO', cmds_f)
+
         # Verify THERMOSTAT_C uses non-input editor tempC
         sts_c = {st.get('id'): st.get('editor') for st in nodedef_map['THERMOSTAT_C'].find('sts').findall('st')}
         self.assertEqual(sts_c['ST'], 'tempC')
         self.assertEqual(sts_c['CLISPH'], 'tempC')
+
+        # Verify THERMOSTAT_C accepts standard and dedicated commands
+        cmds_c = {cmd.get('id') for cmd in nodedef_map['THERMOSTAT_C'].find('cmds').find('accepts').findall('cmd')}
+        self.assertIn('SET_HOLD', cmds_c)
+        self.assertIn('SET_PERM_HOLD', cmds_c)
+        self.assertIn('SET_AUTO', cmds_c)
 
         # Check en_us.txt
         nls_path = os.path.join(repo_dir, 'profile', 'nls', 'en_us.txt')
