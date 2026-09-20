@@ -8,6 +8,10 @@ CMD-ctl-DON-NAME = On
 CMD-ctl-DOF-NAME = Off
 
 # Thermostat Node (Fahrenheit & Celsius)
+ND-thermostat_f-NAME = Thermostat Node
+ND-thermostat_f-ICON = Thermostat
+ND-thermostat_c-NAME = Thermostat Node
+ND-thermostat_c-ICON = Thermostat
 ND-THERMOSTAT_F-NAME = Thermostat Node
 ND-THERMOSTAT_F-ICON = Thermostat
 ND-THERMOSTAT_C-NAME = Thermostat Node

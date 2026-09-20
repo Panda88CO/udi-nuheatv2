@@ -7,6 +7,7 @@ import threading
 from nodes.base import LOGGER, BaseNode
 
 VERSION = "2.2.10"
+VERSION = "2.2.11"
 
 try:
     import udi_interface
@@ -710,8 +711,19 @@ class Controller(BaseNode):
             return
 
         for stat in thermostats:
-            stat_address = str(stat['serialNumber'])
-            name = stat.get('name') or f"NuHeat {stat_address}"
+            raw_address = str(stat['serialNumber'])
+            if hasattr(self.poly, 'getValidAddress') and callable(self.poly.getValidAddress):
+                val_address = self.poly.getValidAddress(raw_address)
+                stat_address = str(val_address) if val_address is not None else raw_address
+            else:
+                stat_address = raw_address
+
+            raw_name = stat.get('name') or f"NuHeat {stat_address}"
+            if hasattr(self.poly, 'getValidName') and callable(self.poly.getValidName):
+                val_name = self.poly.getValidName(raw_name)
+                name = str(val_name) if val_name is not None else raw_name
+            else:
+                name = raw_name
             energy_log_day_address = "eld" + stat_address
             energy_log_week_address = "elw" + stat_address
             energy_log_year_address = "ely" + stat_address

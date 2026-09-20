@@ -24,6 +24,8 @@ class TestPG3Nodes(unittest.TestCase):
         self.mock_poly.getNode.return_value = None
         self.mock_poly.ADDNODEDONE = 'ADDNODEDONE'
         self.mock_poly.DELNODEDONE = 'DELNODEDONE'
+        self.mock_poly.getValidAddress = MagicMock(side_effect=lambda x: str(x).lower()[:14])
+        self.mock_poly.getValidName = MagicMock(side_effect=lambda x: str(x).replace("'", ""))
 
     def test_controller_init_and_token(self):
         controller = Controller(self.mock_poly, 'controller', 'controller', 'NuHeat')
@@ -205,7 +207,7 @@ class TestPG3Nodes(unittest.TestCase):
         controller.NuHeat.set_mode_hold.return_value = True
 
         node = ThermostatNode(self.mock_poly, '99887766', '99887766', 'Guest Bath', controller, temp_uom=17)
-        self.assertEqual(node.id, 'THERMOSTAT_F')
+        self.assertEqual(node.id, 'thermostat_f')
         node.setDriver = MagicMock()
 
         # Test update_info in Auto mode (CLISPH reports active setpoint and GV4 cast to Schedule)
@@ -396,7 +398,7 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertTrue(os.path.isfile(version_path))
         with open(version_path, 'r') as f:
             v_content = f.read().strip()
-        self.assertEqual(v_content, "2.2.10")
+        self.assertEqual(v_content, "2.2.11")
 
         # Check editors.xml
         editors_path = os.path.join(repo_dir, 'profile', 'editor', 'editors.xml')
@@ -454,27 +456,29 @@ class TestPG3Nodes(unittest.TestCase):
         nodedef_map = {nd.get('id'): nd for nd in root_nodedefs.findall('nodeDef')}
 
         self.assertIn('controller', nodedef_map)
-        self.assertIn('THERMOSTAT_F', nodedef_map)
-        self.assertIn('THERMOSTAT_C', nodedef_map)
+        self.assertIn('thermostat_f', nodedef_map)
+        self.assertIn('thermostat_c', nodedef_map)
 
-        # Verify THERMOSTAT_F uses non-input editor tempF
-        sts_f = {st.get('id'): st.get('editor') for st in nodedef_map['THERMOSTAT_F'].find('sts').findall('st')}
+        # Verify thermostat_f uses non-input editor tempF and explicit sends
+        self.assertIsNotNone(nodedef_map['thermostat_f'].find('cmds').find('sends'))
+        sts_f = {st.get('id'): st.get('editor') for st in nodedef_map['thermostat_f'].find('sts').findall('st')}
         self.assertEqual(sts_f['ST'], 'tempF')
         self.assertEqual(sts_f['CLISPH'], 'tempF')
 
-        # Verify THERMOSTAT_F accepts standard and dedicated commands
-        cmds_f = {cmd.get('id') for cmd in nodedef_map['THERMOSTAT_F'].find('cmds').find('accepts').findall('cmd')}
+        # Verify thermostat_f accepts standard and dedicated commands
+        cmds_f = {cmd.get('id') for cmd in nodedef_map['thermostat_f'].find('cmds').find('accepts').findall('cmd')}
         self.assertIn('SET_HOLD', cmds_f)
         self.assertIn('SET_PERM_HOLD', cmds_f)
         self.assertIn('SET_AUTO', cmds_f)
 
-        # Verify THERMOSTAT_C uses non-input editor tempC
-        sts_c = {st.get('id'): st.get('editor') for st in nodedef_map['THERMOSTAT_C'].find('sts').findall('st')}
+        # Verify thermostat_c uses non-input editor tempC and explicit sends
+        self.assertIsNotNone(nodedef_map['thermostat_c'].find('cmds').find('sends'))
+        sts_c = {st.get('id'): st.get('editor') for st in nodedef_map['thermostat_c'].find('sts').findall('st')}
         self.assertEqual(sts_c['ST'], 'tempC')
         self.assertEqual(sts_c['CLISPH'], 'tempC')
 
-        # Verify THERMOSTAT_C accepts standard and dedicated commands
-        cmds_c = {cmd.get('id') for cmd in nodedef_map['THERMOSTAT_C'].find('cmds').find('accepts').findall('cmd')}
+        # Verify thermostat_c accepts standard and dedicated commands
+        cmds_c = {cmd.get('id') for cmd in nodedef_map['thermostat_c'].find('cmds').find('accepts').findall('cmd')}
         self.assertIn('SET_HOLD', cmds_c)
         self.assertIn('SET_PERM_HOLD', cmds_c)
         self.assertIn('SET_AUTO', cmds_c)
@@ -484,6 +488,8 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertTrue(os.path.isfile(nls_path))
         with open(nls_path, 'r') as f:
             nls_content = f.read()
+        self.assertIn('ND-thermostat_f-NAME', nls_content)
+        self.assertIn('ND-thermostat_c-NAME', nls_content)
         self.assertIn('ND-THERMOSTAT_F-NAME', nls_content)
         self.assertIn('ND-THERMOSTAT_C-NAME', nls_content)
         self.assertIn('HOLD_NAMES-0 = Schedule', nls_content)
@@ -491,13 +497,13 @@ class TestPG3Nodes(unittest.TestCase):
 
     def test_thermostat_subclasses_f_and_c(self):
         node_f = ThermostatNode_F(self.mock_poly, '112233', '112233', 'Test F')
-        self.assertEqual(node_f.id, 'THERMOSTAT_F')
+        self.assertEqual(node_f.id, 'thermostat_f')
         self.assertEqual(node_f.temp_uom, 17)
         self.assertEqual(node_f.drivers[0]['uom'], 17)
         self.assertEqual(node_f.drivers[1]['uom'], 17)
 
         node_c = ThermostatNode_C(self.mock_poly, '445566', '445566', 'Test C')
-        self.assertEqual(node_c.id, 'THERMOSTAT_C')
+        self.assertEqual(node_c.id, 'thermostat_c')
         self.assertEqual(node_c.temp_uom, 4)
         self.assertEqual(node_c.drivers[0]['uom'], 4)
         self.assertEqual(node_c.drivers[1]['uom'], 4)

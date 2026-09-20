@@ -18,7 +18,7 @@
   </nodeDef>
 
   <!-- Thermostat Node Definition (Fahrenheit) -->
-  <nodeDef id="THERMOSTAT_F" nls="TSTAT">
+  <nodeDef id="thermostat_f" nls="TSTAT">
     <editors />
     <sts>
       <st id="ST" editor="tempF" />
@@ -34,7 +34,8 @@
       <st id="TIME" editor="timestamp" />
     </sts>
     <cmds>
-      <sends />
+      <sends>
+      </sends>
       <accepts>
         <cmd id="UPDATE" />
         <cmd id="SET_AUTO" />
@@ -50,7 +51,7 @@
   </nodeDef>
 
   <!-- Thermostat Node Definition (Celsius) -->
-  <nodeDef id="THERMOSTAT_C" nls="TSTAT">
+  <nodeDef id="thermostat_c" nls="TSTAT">
     <editors />
     <sts>
       <st id="ST" editor="tempC" />
@@ -66,7 +67,8 @@
       <st id="TIME" editor="timestamp" />
     </sts>
     <cmds>
-      <sends />
+      <sends>
+      </sends>
       <accepts>
         <cmd id="UPDATE" />
         <cmd id="SET_AUTO" />
