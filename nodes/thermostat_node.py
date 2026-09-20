@@ -45,7 +45,6 @@ def _get_param(command, param_name, default=None):
 
 
 class ThermostatNode(BaseNode):
-    id = 'THERMOSTAT_F'
     id = 'thermostat_f'
 
     drivers = [
@@ -76,8 +75,6 @@ class ThermostatNode(BaseNode):
         else:
             self.temp_uom = 17
 
-        if self.temp_uom == 4 and getattr(self, 'id', None) == 'THERMOSTAT_F':
-            self.id = 'THERMOSTAT_C'
         if self.temp_uom == 4 and getattr(self, 'id', None) in ('thermostat_f', 'THERMOSTAT_F'):
             self.id = 'thermostat_c'
             self.drivers = [
@@ -343,7 +340,6 @@ class ThermostatNode(BaseNode):
 
 
 class ThermostatNode_F(ThermostatNode):
-    id = 'THERMOSTAT_F'
     id = 'thermostat_f'
     drivers = [
         {'driver': 'ST', 'value': 0, 'uom': 17},
@@ -364,7 +360,6 @@ class ThermostatNode_F(ThermostatNode):
 
 
 class ThermostatNode_C(ThermostatNode):
-    id = 'THERMOSTAT_C'
     id = 'thermostat_c'
     drivers = [
         {'driver': 'ST', 'value': 0, 'uom': 4},
