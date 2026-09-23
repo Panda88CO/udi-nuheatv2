@@ -10,7 +10,7 @@
   </editor>
 
   <!-- Mode Selection -->
-  <editor id="MODE_SEL">
+  <editor id="MODESEL">
     <range uom="25" subset="1,2,3" nls="MODE" />
   </editor>
 
@@ -20,7 +20,7 @@
   </editor>
 
   <!-- Temperature Fahrenheit (Command Input) -->
-  <editor id="tempF_input">
+  <editor id="tempFinput">
     <range uom="17" min="41" max="104" prec="0" step="1" />
   </editor>
 
@@ -30,35 +30,18 @@
   </editor>
 
   <!-- Temperature Celsius (Command Input) -->
-  <editor id="tempC_input">
+  <editor id="tempCinput">
     <range uom="4" min="5" max="40" prec="0" step="1" />
   </editor>
 
-  <!-- Aliases for backwards compatibility / alternative editor references -->
-  <editor id="CLITEMP_F">
-    <range uom="17" min="41" max="104" prec="0" />
-  </editor>
-
-  <editor id="CLITEMP_F_INPUT">
-    <range uom="17" min="41" max="104" step="1" />
-  </editor>
-
-  <editor id="CLITEMP_C">
-    <range uom="4" min="5" max="40" prec="0" />
-  </editor>
-
-  <editor id="CLITEMP_C_INPUT">
-    <range uom="4" min="5" max="40" step="1" />
-  </editor>
-
   <!-- Hold End Time (Unix timestamp or special state) -->
-  <editor id="HOLD_TIME">
-    <range uom="25" subset="0,1" nls="HOLD_NAMES" />
+  <editor id="HOLDTIME">
+    <range uom="25" subset="0,1" nls="HOLDNAMES" />
     <range uom="151" min="0" max="4294967295" prec="0" />
   </editor>
 
   <!-- Hold Duration Minutes -->
-  <editor id="HOLD_MINS">
+  <editor id="HOLDMINS">
     <range uom="45" min="0" max="1440" prec="0" step="1" />
   </editor>
 

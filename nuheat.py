@@ -6,7 +6,7 @@ import threading
 
 from nodes.base import LOGGER, BaseNode
 
-VERSION = "2.2.11"
+VERSION = "2.2.13"
 
 try:
     import udi_interface
@@ -63,19 +63,19 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
     CLITEMP supports both temperature UOMs: 'F' -> 17 and 'C' -> 4.
     """
     if temp_unit == "C":
-        clitemp_ranges = [
+        clitempranges = [
             {"uom": "4", "min": 5, "max": 40, "prec": 0},
             {"uom": "25", "subset": "0,1", "names": {"0": "Schedule", "1": "Permanent Hold"}},
         ]
-        clitemp_range_input = [
+        clitemprangeinput = [
             {"uom": "4", "min": 5, "max": 40, "step": 1},
         ]
     else:
-        clitemp_ranges = [
+        clitempranges = [
             {"uom": "17", "min": 41, "max": 104, "prec": 0},
             {"uom": "25", "subset": "0,1", "names": {"0": "Schedule", "1": "Permanent Hold"}},
         ]
-        clitemp_range_input = [
+        clitemprangeinput = [
             {"uom": "17", "min": 41, "max": 104, "step": 1},
         ]
 
@@ -93,7 +93,7 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
             ],
         },
         {
-            "id": "MODE_SEL",
+            "id": "MODESEL",
             "ranges": [
                 {
                     "uom": "25",
@@ -108,18 +108,14 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
         },
         {
             "id": "CLITEMP",
-            "ranges": clitemp_ranges,
+            "ranges": clitempranges,
         },
         {
-            "id": "clitemp_range_input",
-            "ranges": clitemp_range_input,
+            "id": "clitemprangeinput",
+            "ranges": clitemprangeinput,
         },
         {
-            "id": "CLITEMP_INPUT",
-            "ranges": clitemp_range_input,
-        },
-        {
-            "id": "HOLD_TIME",
+            "id": "HOLDTIME",
             "ranges": [
                 {"uom": "151", "min": 0, "max": 4294967295, "prec": 0},
                 {
@@ -133,7 +129,7 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
             ],
         },
         {
-            "id": "HOLD_MINS",
+            "id": "HOLDMINS",
             "ranges": [
                 {"uom": "45", "min": 0, "max": 1440, "step": 1}
             ],
@@ -179,13 +175,13 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
             "properties": [
                 {"id": "ST", "name": "Current Temperature", "editor": "CLITEMP"},
                 {"id": "CLISPH", "name": "Heat Setpoint", "editor": "CLITEMP"},
-                {"id": "CLIMD", "name": "Mode", "editor": "MODE_SEL"},
+                {"id": "CLIMD", "name": "Mode", "editor": "MODESEL"},
                 {"id": "CLIHCS", "name": "Heat State", "editor": "CLIHCS"},
                 {"id": "GV0", "name": "Daily Energy", "editor": "TPW"},
                 {"id": "GV1", "name": "Last 7 Days Energy", "editor": "TPW"},
                 {"id": "GV2", "name": "Monthly Energy", "editor": "TPW"},
                 {"id": "GV3", "name": "Yearly Energy", "editor": "TPW"},
-                {"id": "GV4", "name": "Hold End Time", "editor": "HOLD_TIME"},
+                {"id": "GV4", "name": "Hold End Time", "editor": "HOLDTIME"},
                 {"id": "GV5", "name": "Online", "editor": "bool"},
                 {"id": "TIME", "name": "Last Update", "editor": "timestamp"},
             ],
@@ -197,15 +193,15 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
                         "id": "SET_HOLD",
                         "name": "Set Hold",
                         "parameters": [
-                            {"id": "temp", "name": "Temperature", "editor": "clitemp_range_input", "init": "CLISPH"},
-                            {"id": "hold", "name": "Hold Minutes", "editor": "HOLD_MINS"},
+                            {"id": "temp", "name": "Temperature", "editor": "clitemprangeinput", "init": "CLISPH"},
+                            {"id": "hold", "name": "Hold Minutes", "editor": "HOLDMINS"},
                         ],
                     },
                     {
                         "id": "SET_PERM_HOLD",
                         "name": "Set Permanent Hold",
                         "parameters": [
-                            {"id": "temp", "name": "Temperature", "editor": "clitemp_range_input", "init": "CLISPH"},
+                            {"id": "temp", "name": "Temperature", "editor": "clitemprangeinput", "init": "CLISPH"},
                         ],
                     },
                 ],

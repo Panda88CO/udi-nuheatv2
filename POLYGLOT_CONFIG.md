@@ -54,8 +54,7 @@ For each thermostat discovered on your account, nodes are created serially 1-by-
    - **Commands**:
      - **Update (`UPDATE`)**: Immediately force updates all nodes and energy logs.
 
-2. **Thermostat Node** (`THERMOSTAT_F` for Fahrenheit [UOM 17] or `THERMOSTAT_C` for Celsius [UOM 4], determined during startup):
-2. **Thermostat Node** (`thermostat_f` for Fahrenheit [UOM 17] or `thermostat_c` for Celsius [UOM 4], determined during startup):
+2. **Thermostat Node** (`thermostatf` for Fahrenheit [UOM 17] or `thermostatc` for Celsius [UOM 4], determined during startup):
    - **Status Drivers**:
      - Current Temperature (`ST`)
      - Heat Setpoint (`CLISPH`)

@@ -8,14 +8,10 @@ CMD-ctl-DON-NAME = On
 CMD-ctl-DOF-NAME = Off
 
 # Thermostat Node (Fahrenheit & Celsius)
-ND-thermostat_f-NAME = Thermostat Node
-ND-thermostat_f-ICON = Thermostat
-ND-thermostat_c-NAME = Thermostat Node
-ND-thermostat_c-ICON = Thermostat
-ND-THERMOSTAT_F-NAME = Thermostat Node
-ND-THERMOSTAT_F-ICON = Thermostat
-ND-THERMOSTAT_C-NAME = Thermostat Node
-ND-THERMOSTAT_C-ICON = Thermostat
+ND-thermostatf-NAME = Thermostat Node
+ND-thermostatf-ICON = Thermostat
+ND-thermostatc-NAME = Thermostat Node
+ND-thermostatc-ICON = Thermostat
 
 ST-TSTAT-ST-NAME = Current Temperature
 ST-TSTAT-CLISPH-NAME = Heat Setpoint
@@ -48,5 +44,5 @@ MODE-1 = Auto
 MODE-2 = Hold
 MODE-3 = Permanent Hold
 
-HOLD_NAMES-0 = Schedule
-HOLD_NAMES-1 = Permanent Hold
+HOLDNAMES-0 = Schedule
+HOLDNAMES-1 = Permanent Hold
