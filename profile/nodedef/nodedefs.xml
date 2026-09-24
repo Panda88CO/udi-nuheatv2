@@ -3,8 +3,8 @@
   <nodeDef id="controller" nls="ctl">
     <editors />
     <sts>
-      <st id="ST" editor="bool" />
-      <st id="TIME" editor="timestamp" />
+      <st id="ST" editor="ONLINE" />
+      <st id="TIME" editor="TIMESTAMP" />
     </sts>
     <cmds>
       <sends>
@@ -21,30 +21,30 @@
   <nodeDef id="thermostatf" nls="TSTAT">
     <editors />
     <sts>
-      <st id="ST" editor="tempF" />
-      <st id="CLISPH" editor="tempF" />
+      <st id="ST" editor="TEMPF" />
+      <st id="CLISPH" editor="TEMPF" />
       <st id="CLIMD" editor="MODESEL" />
       <st id="CLIHCS" editor="CLIHCS" />
       <st id="GV0" editor="TPW" />
       <st id="GV1" editor="TPW" />
       <st id="GV2" editor="TPW" />
       <st id="GV3" editor="TPW" />
-      <st id="GV4" editor="HOLDTIME" />
-      <st id="GV5" editor="bool" />
-      <st id="TIME" editor="timestamp" />
+      <st id="GV4" editor="HOLDMINS" />
+      <st id="GV5" editor="ONLINE" />
+      <st id="TIME" editor="TIMESTAMP" />
     </sts>
     <cmds>
       <sends>
       </sends>
       <accepts>
         <cmd id="UPDATE" />
-        <cmd id="SET_AUTO" />
-        <cmd id="SET_HOLD">
-          <p id="tempholdF" editor="tempFinput" init="CLISPH" />
-          <p id="hold" editor="HOLDMINS" />
+        <cmd id="SETAUTO" />
+        <cmd id="SETHOLD">
+          <p id="TEMPHOLDF" editor="TEMPFINPUT" init="CLISPH" />
+          <p id="HOLD" editor="HOLDMINS" />
         </cmd>
-        <cmd id="SET_PERM_HOLD">
-          <p id="" editor="tempFinput" init="CLISPH" />
+        <cmd id="SETPERMHOLD">
+          <p id="" editor="TEMPFINPUT" init="CLISPH" />
         </cmd>
       </accepts>
     </cmds>
@@ -54,30 +54,30 @@
   <nodeDef id="thermostatc" nls="TSTAT">
     <editors />
     <sts>
-      <st id="ST" editor="tempC" />
-      <st id="CLISPH" editor="tempC" />
+      <st id="ST" editor="TEMPC" />
+      <st id="CLISPH" editor="TEMPC" />
       <st id="CLIMD" editor="MODESEL" />
       <st id="CLIHCS" editor="CLIHCS" />
       <st id="GV0" editor="TPW" />
       <st id="GV1" editor="TPW" />
       <st id="GV2" editor="TPW" />
       <st id="GV3" editor="TPW" />
-      <st id="GV4" editor="HOLDTIME" />
-      <st id="GV5" editor="bool" />
-      <st id="TIME" editor="timestamp" />
+      <st id="GV4" editor="HOLDMINS" />
+      <st id="GV5" editor="ONLINE" />
+      <st id="TIME" editor="TIMESTAMP" />
     </sts>
     <cmds>
       <sends>
       </sends>
       <accepts>
         <cmd id="UPDATE" />
-        <cmd id="SET_AUTO" />
-        <cmd id="SET_HOLD">
-          <p id="tempholdC" editor="tempCinput" init="CLISPH" />
-          <p id="hold" editor="HOLDMINS" />
+        <cmd id="SETAUTO" />
+        <cmd id="SETHOLD">
+          <p id="TEMPHOLDC" editor="TEMPCINPUT" init="CLISPH" />
+          <p id="HOLD" editor="HOLDMINS" />
         </cmd>
-        <cmd id="SET_PERM_HOLD">
-          <p id="" editor="tempCinput" init="CLISPH" />
+        <cmd id="SETPERMHOLD">
+          <p id="" editor="TEMPCINPUT" init="CLISPH" />
         </cmd>
       </accepts>
     </cmds>

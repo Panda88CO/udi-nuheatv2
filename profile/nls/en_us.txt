@@ -21,21 +21,21 @@ ST-TSTAT-GV0-NAME = Daily Energy
 ST-TSTAT-GV1-NAME = Last 7 Days Energy
 ST-TSTAT-GV2-NAME = Monthly Energy
 ST-TSTAT-GV3-NAME = Yearly Energy
-ST-TSTAT-GV4-NAME = Hold End Time
+ST-TSTAT-GV4-NAME = Hold Time
 ST-TSTAT-GV5-NAME = Online
 ST-TSTAT-TIME-NAME = Last Update
 
 CMD-TSTAT-UPDATE-NAME = Force Update
-CMD-TSTAT-SET_AUTO-NAME = Set Auto
-CMD-TSTAT-SET_HOLD-NAME = Set Hold
-CMDP-tempholdC-NAME = Hold Temperature
-CMDP-tempholdF-NAME = Hold Temperature
-CMDP-hold-NAME = Hold Minutes
-CMD-TSTAT-SET_PERM_HOLD-NAME = Set Permanent Temp
+CMD-TSTAT-SETAUTO-NAME = Set Auto
+CMD-TSTAT-SETHOLD-NAME = Set Hold
+CMDP-TEMPHOLDC-NAME = Hold Temperature
+CMDP-TEMPHOLDF-NAME = Hold Temperature
+CMDP-HOLD-NAME = Hold Minutes
+CMD-TSTAT-SETPERMHOLD-NAME = Set Permanent Temp
 
 # Discrete Value Subsets
-BOOL-0 = Offline
-BOOL-1 = Online
+ONLINE-0 = Offline
+ONLINE-1 = Online
 
 CLIHCS-0 = Idle
 CLIHCS-1 = Heating
@@ -43,6 +43,3 @@ CLIHCS-1 = Heating
 MODE-1 = Auto
 MODE-2 = Hold
 MODE-3 = Permanent Hold
-
-HOLDNAMES-0 = Schedule
-HOLDNAMES-1 = Permanent Hold

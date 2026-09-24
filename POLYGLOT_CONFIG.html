@@ -190,16 +190,16 @@
     <h2>3. Operating Mode &amp; Setpoint Control</h2>
     <p>The thermostat uses 3 dedicated commands to control operating mode and heating setpoint:</p>
     <ul>
-      <li><strong>Set Auto (<code>SET_AUTO</code>)</strong>: Follows internal schedule. Takes no parameters. Hold End Time (<code>GV4</code>) displays as <code>Schedule</code> and Setpoint (<code>CLISPH</code>) reflects the scheduled temperature.</li>
-      <li><strong>Set Hold (<code>SET_HOLD</code>)</strong>: Temporary hold with 2 parameters:
+      <li><strong>Set Auto (<code>SETAUTO</code>)</strong>: Follows internal schedule. Takes no parameters. Hold Time (<code>GV4</code>) displays as <code>0</code> minutes, Operating Mode (<code>CLIMD</code>) displays as <code>Auto</code>, and Setpoint (<code>CLISPH</code>) reflects the scheduled temperature.</li>
+      <li><strong>Set Hold (<code>SETHOLD</code>)</strong>: Temporary hold with 2 parameters:
         <ul>
-          <li><strong>Temperature (<code>temp</code>)</strong>: Target heating setpoint in &deg;F or &deg;C.</li>
-          <li><strong>Hold Minutes (<code>hold</code>)</strong>: Duration in minutes (0&ndash;1440). Sets <code>GV4</code> to the hold expiration timestamp (Unix epoch timestamp, UOM 151).</li>
+          <li><strong>Hold Temperature (<code>TEMPHOLDF</code> / <code>TEMPHOLDC</code>)</strong>: Target heating setpoint in &deg;F or &deg;C.</li>
+          <li><strong>Hold Minutes (<code>HOLD</code>)</strong>: Duration in minutes (0&ndash;1440). Sets <code>GV4</code> to remaining hold duration in minutes (UOM 45) and <code>CLIMD</code> to <code>Hold</code>.</li>
         </ul>
       </li>
-      <li><strong>Set Permanent Temp (<code>SET_PERM_HOLD</code>)</strong>: Manual hold with 1 parameter:
+      <li><strong>Set Permanent Temp (<code>SETPERMHOLD</code>)</strong>: Manual hold with 1 parameter:
         <ul>
-          <li><strong>Temperature (<code>temp</code>)</strong>: Target heating setpoint in &deg;F or &deg;C indefinitely. <code>GV4</code> displays as <code>Permanent Hold</code>.</li>
+          <li><strong>Temperature (<code>temp</code>)</strong>: Target heating setpoint in &deg;F or &deg;C indefinitely. <code>GV4</code> displays as <code>0</code> minutes and <code>CLIMD</code> displays as <code>Permanent Hold</code>.</li>
         </ul>
       </li>
     </ul>
@@ -233,7 +233,7 @@
               <li>Heat Setpoint (<code>CLISPH</code>)</li>
               <li>Operating Mode (<code>CLIMD</code> &mdash; Auto, Hold, Permanent Hold)</li>
               <li>Heat State (<code>CLIHCS</code> &mdash; Idle, Heating)</li>
-              <li>Hold End Time (<code>GV4</code> &mdash; displays expiration timestamp [UOM 151] on Hold; displays <code>Permanent Hold</code> in Permanent Hold mode, and <code>Schedule</code> in Auto mode)</li>
+              <li>Hold Time (<code>GV4</code> &mdash; duration in minutes [UOM 45]; displays remaining minutes on Temporary Hold; 0 in Auto and Permanent Hold)</li>
               <li>Online Status (<code>GV5</code> &mdash; Online / Offline, UOM 2)</li>
               <li>Last Update (<code>TIME</code> &mdash; timestamp, UOM 151)</li>
               <li>Daily Energy (<code>GV0</code> &mdash; kWh, UOM 33)</li>
@@ -244,9 +244,9 @@
           </li>
           <li><strong>Commands</strong>:
             <ul>
-              <li><strong>Set Auto (<code>SET_AUTO</code>)</strong>: Sets thermostat to follow internal schedule.</li>
-              <li><strong>Set Hold (<code>SET_HOLD</code>)</strong>: Sets temporary hold with target temperature and hold duration in minutes.</li>
-              <li><strong>Set Permanent Temp (<code>SET_PERM_HOLD</code>)</strong>: Sets permanent manual hold with target temperature.</li>
+              <li><strong>Set Auto (<code>SETAUTO</code>)</strong>: Sets thermostat to follow internal schedule.</li>
+              <li><strong>Set Hold (<code>SETHOLD</code>)</strong>: Sets temporary hold with target temperature and hold duration in minutes.</li>
+              <li><strong>Set Permanent Temp (<code>SETPERMHOLD</code>)</strong>: Sets permanent manual hold with target temperature.</li>
               <li><strong>Force Update (<code>UPDATE</code>)</strong>: Immediately force updates thermostat status.</li>
             </ul>
           </li>

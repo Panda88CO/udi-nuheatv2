@@ -6,7 +6,7 @@ import threading
 
 from nodes.base import LOGGER, BaseNode
 
-VERSION = "2.2.13"
+VERSION = "2.2.18"
 
 try:
     import udi_interface
@@ -81,7 +81,7 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
 
     editors = [
         {
-            "id": "bool",
+            "id": "ONLINE",
             "ranges": [
                 {"uom": "2", "subset": "0-1", "names": {"0": "Offline", "1": "Online"}}
             ],
@@ -111,22 +111,8 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
             "ranges": clitempranges,
         },
         {
-            "id": "clitemprangeinput",
+            "id": "CLITEMPRANGEINPUT",
             "ranges": clitemprangeinput,
-        },
-        {
-            "id": "HOLDTIME",
-            "ranges": [
-                {"uom": "151", "min": 0, "max": 4294967295, "prec": 0},
-                {
-                    "uom": "25",
-                    "subset": "0,1",
-                    "names": {
-                        "0": "Schedule",
-                        "1": "Permanent Hold",
-                    },
-                },
-            ],
         },
         {
             "id": "HOLDMINS",
@@ -141,7 +127,7 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
             ],
         },
         {
-            "id": "timestamp",
+            "id": "TIMESTAMP",
             "ranges": [
                 {"uom": "151", "min": 0, "max": 4294967295, "prec": 0}
             ],
@@ -154,8 +140,8 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
             "name": "NuHeat Signature Controller",
             "icon": "Thermostat",
             "properties": [
-                {"id": "ST", "name": "NodeServer Online", "editor": "bool"},
-                {"id": "TIME", "name": "Last Update", "editor": "timestamp"},
+                {"id": "ST", "name": "NodeServer Online", "editor": "ONLINE"},
+                {"id": "TIME", "name": "Last Update", "editor": "TIMESTAMP"},
             ],
             "cmds": {
                 "accepts": [
@@ -181,27 +167,27 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
                 {"id": "GV1", "name": "Last 7 Days Energy", "editor": "TPW"},
                 {"id": "GV2", "name": "Monthly Energy", "editor": "TPW"},
                 {"id": "GV3", "name": "Yearly Energy", "editor": "TPW"},
-                {"id": "GV4", "name": "Hold End Time", "editor": "HOLDTIME"},
-                {"id": "GV5", "name": "Online", "editor": "bool"},
-                {"id": "TIME", "name": "Last Update", "editor": "timestamp"},
+                {"id": "GV4", "name": "Hold Time", "editor": "HOLDMINS"},
+                {"id": "GV5", "name": "Online", "editor": "ONLINE"},
+                {"id": "TIME", "name": "Last Update", "editor": "TIMESTAMP"},
             ],
             "cmds": {
                 "accepts": [
                     {"id": "UPDATE", "name": "Force Update"},
-                    {"id": "SET_AUTO", "name": "Set Auto"},
+                    {"id": "SETAUTO", "name": "Set Auto"},
                     {
-                        "id": "SET_HOLD",
+                        "id": "SETHOLD",
                         "name": "Set Hold",
                         "parameters": [
-                            {"id": "temp", "name": "Temperature", "editor": "clitemprangeinput", "init": "CLISPH"},
-                            {"id": "hold", "name": "Hold Minutes", "editor": "HOLDMINS"},
+                            {"id": "TEMP", "name": "Temperature", "editor": "CLITEMPRANGEINPUT", "init": "CLISPH"},
+                            {"id": "HOLD", "name": "Hold Minutes", "editor": "HOLDMINS"},
                         ],
                     },
                     {
-                        "id": "SET_PERM_HOLD",
+                        "id": "SETPERMHOLD",
                         "name": "Set Permanent Hold",
                         "parameters": [
-                            {"id": "temp", "name": "Temperature", "editor": "clitemprangeinput", "init": "CLISPH"},
+                            {"id": "TEMP", "name": "Temperature", "editor": "CLITEMPRANGEINPUT", "init": "CLISPH"},
                         ],
                     },
                 ],

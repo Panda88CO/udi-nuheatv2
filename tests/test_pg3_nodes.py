@@ -2,6 +2,7 @@ import importlib.util
 import os
 import time
 import unittest
+from datetime import datetime, timezone, timedelta
 from unittest.mock import MagicMock, patch
 from nuheat import NuHeat
 from nodes import ThermostatNode, ThermostatNode_F, ThermostatNode_C, EnergyLogDayNode, EnergyLogWeekNode, EnergyLogYearNode
@@ -210,13 +211,13 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertEqual(node.id, 'thermostatf')
         node.setDriver = MagicMock()
 
-        # Test update_info in Auto mode (CLISPH reports active setpoint and GV4 cast to Schedule)
+        # Test update_info in Auto mode (CLISPH reports active setpoint, GV4=0)
         node.update_info()
         node.setDriver.assert_any_call('ST', 68.0, uom=17)
         node.setDriver.assert_any_call('CLIHCS', 1, uom=66)
         node.setDriver.assert_any_call('CLIMD', 1, uom=25)
         node.setDriver.assert_any_call('CLISPH', 69.8, uom=17)
-        node.setDriver.assert_any_call('GV4', 0, uom=25)
+        node.setDriver.assert_any_call('GV4', 0, uom=45)
         node.setDriver.assert_any_call('GV5', 1, uom=2)
 
         # Test SET_PERM_HOLD - Permanent Hold (takes temp)
@@ -224,7 +225,7 @@ class TestPG3Nodes(unittest.TestCase):
         controller.NuHeat.set_mode_manual.assert_called_once_with('99887766', 2222)
         node.setDriver.assert_any_call('CLIMD', 3, uom=25)
         node.setDriver.assert_any_call('CLISPH', 72.0, uom=17)
-        node.setDriver.assert_any_call('GV4', 1, uom=25)
+        node.setDriver.assert_any_call('GV4', 0, uom=45)
 
         # Test SET_HOLD - Temporary Hold (takes temp and hold duration in minutes)
         node.set_hold({'query': {'temp.uom17': '70', 'hold.uom45': '90'}})
@@ -235,9 +236,7 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertTrue(controller.NuHeat.set_mode_hold.call_args[1].get('hold_until').endswith('Z'))
         node.setDriver.assert_any_call('CLIMD', 2, uom=25)
         node.setDriver.assert_any_call('CLISPH', 70.0, uom=17)
-        gv4_calls = [c for c in node.setDriver.call_args_list if c[0][0] == 'GV4' and c[1].get('uom') == 151]
-        self.assertEqual(len(gv4_calls), 1)
-        self.assertGreater(gv4_calls[0][0][1], int(time.time()))
+        node.setDriver.assert_any_call('GV4', 90, uom=45)
 
         # Test SET_PERM_HOLD with empty parameter id (id="" -> .uom17 from nodedefs.xml)
         node.set_permanent_hold({'query': {'.uom17': '41'}})
@@ -249,13 +248,20 @@ class TestPG3Nodes(unittest.TestCase):
         controller.NuHeat.set_mode_manual.assert_called_with('99887766', 2111)
         node.setDriver.assert_any_call('CLISPH', 70.0, uom=17)
 
-        # Test SET_HOLD with tempholdF.uom17 (from nodedefs.xml)
-        node.set_hold({'query': {'tempholdF.uom17': '42', 'hold.uom45': '6'}})
+        # Test SET_HOLD with TEMPHOLDF.uom17 and HOLD.uom45 (from nodedefs.xml)
+        node.set_hold({'query': {'TEMPHOLDF.uom17': '42', 'HOLD.uom45': '6'}})
         call_args = controller.NuHeat.set_mode_hold.call_args[0]
         self.assertEqual(call_args[1], 556)
         node.setDriver.assert_any_call('CLISPH', 42.0, uom=17)
 
-        # Test update_info with holdUntil parses timestamp
+        # Test backwards compatibility with lowercase keys
+        node.set_hold({'query': {'tempholdF.uom17': '43', 'hold.uom45': '10'}})
+        call_args = controller.NuHeat.set_mode_hold.call_args[0]
+        self.assertEqual(call_args[1], 611)
+        node.setDriver.assert_any_call('CLISPH', 43.0, uom=17)
+
+        # Test update_info with holdUntil calculates remaining minutes
+        future_dt = datetime.now(timezone.utc) + timedelta(minutes=120)
         controller.NuHeat.get_thermostat.return_value = {
             'serialNumber': '99887766',
             'currentTemperature': 2000,
@@ -263,16 +269,16 @@ class TestPG3Nodes(unittest.TestCase):
             'mode': 2,
             'isHeating': True,
             'online': True,
-            'holdUntil': '2026-09-12T20:00:00Z'
+            'holdUntil': future_dt.strftime('%Y-%m-%dT%H:%M:%SZ')
         }
         node.update_info()
-        node.setDriver.assert_any_call('GV4', 1789243200, uom=151)
+        node.setDriver.assert_any_call('GV4', 120, uom=45)
 
         # Test SET_AUTO - Auto (takes no parameters)
         node.set_auto()
         controller.NuHeat.set_mode_auto.assert_called_once_with('99887766')
         node.setDriver.assert_any_call('CLIMD', 1, uom=25)
-        node.setDriver.assert_any_call('GV4', 0, uom=25)
+        node.setDriver.assert_any_call('GV4', 0, uom=45)
 
         # Test update_energy
         controller.NuHeat.get_energy_log_day.return_value = [60, 1.25, 0.18]
@@ -294,6 +300,9 @@ class TestPG3Nodes(unittest.TestCase):
         node.reportDrivers.assert_called_once()
         self.assertEqual(node.commands, {
             'UPDATE': ThermostatNode.force_update,
+            'SETAUTO': ThermostatNode.set_auto,
+            'SETHOLD': ThermostatNode.set_hold,
+            'SETPERMHOLD': ThermostatNode.set_permanent_hold,
             'SET_AUTO': ThermostatNode.set_auto,
             'SET_HOLD': ThermostatNode.set_hold,
             'SET_PERM_HOLD': ThermostatNode.set_permanent_hold,
@@ -325,7 +334,7 @@ class TestPG3Nodes(unittest.TestCase):
         node.setDriver.assert_any_call('CLISPH', 21.0, uom=4)
         node.setDriver.assert_any_call('CLIMD', 3, uom=25)
         node.setDriver.assert_any_call('CLIHCS', 0, uom=66)
-        node.setDriver.assert_any_call('GV4', 1, uom=25)
+        node.setDriver.assert_any_call('GV4', 0, uom=45)
         node.setDriver.assert_any_call('GV5', 0, uom=2)
 
         # Test SET_PERM_HOLD with empty parameter id (id="" -> .uom4 from nodedefs.xml)
@@ -343,14 +352,15 @@ class TestPG3Nodes(unittest.TestCase):
         controller.NuHeat.set_mode_manual.assert_called_with('99887766', 2000)
         node.setDriver.assert_any_call('CLISPH', 20.0, uom=4)
 
-        # Test SET_HOLD with tempholdC.uom4 in Celsius
+        # Test SET_HOLD with TEMPHOLDC.uom4 in Celsius
         controller.NuHeat.set_mode_hold.return_value = True
-        node.set_hold({'query': {'tempholdC.uom4': '23', 'hold.uom45': '60'}})
+        node.set_hold({'query': {'TEMPHOLDC.uom4': '23', 'HOLD.uom45': '60'}})
         call_args = controller.NuHeat.set_mode_hold.call_args[0]
         self.assertEqual(call_args[0], '99887766')
         self.assertEqual(call_args[1], 2300)
         node.setDriver.assert_any_call('CLISPH', 23.0, uom=4)
         node.setDriver.assert_any_call('CLIMD', 2, uom=25)
+        node.setDriver.assert_any_call('GV4', 60, uom=45)
 
     def test_energy_log_day_node(self):
         controller = MagicMock()
@@ -399,7 +409,7 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertTrue(os.path.isfile(version_path))
         with open(version_path, 'r') as f:
             v_content = f.read().strip()
-        self.assertEqual(v_content, "2.2.12")
+        self.assertEqual(v_content, "2.2.18")
 
         # Check editors.xml
         editors_path = os.path.join(repo_dir, 'profile', 'editor', 'editors.xml')
@@ -408,33 +418,39 @@ class TestPG3Nodes(unittest.TestCase):
         root_editors = tree_editors.getroot()
         editor_ids = {e.get('id'): e for e in root_editors.findall('editor')}
 
-        # Must have temperature editors for F, C, and their input variants
-        self.assertIn('tempF', editor_ids)
-        self.assertIn('tempFinput', editor_ids)
-        self.assertIn('tempC', editor_ids)
-        self.assertIn('tempCinput', editor_ids)
+        # Must have temperature editors for F, C, and their input variants in UPPERCASE
+        self.assertIn('TEMPF', editor_ids)
+        self.assertIn('TEMPFINPUT', editor_ids)
+        self.assertIn('TEMPC', editor_ids)
+        self.assertIn('TEMPCINPUT', editor_ids)
+        self.assertIn('ONLINE', editor_ids)
+        self.assertIn('TIMESTAMP', editor_ids)
+        self.assertNotIn('tempF', editor_ids)
+        self.assertNotIn('tempC', editor_ids)
+        self.assertNotIn('bool', editor_ids)
+        self.assertNotIn('BOOL', editor_ids)
 
-        temp_f = editor_ids['tempF'].findall('range')
+        temp_f = editor_ids['TEMPF'].findall('range')
         self.assertEqual(len(temp_f), 1)
         self.assertEqual(temp_f[0].get('uom'), '17')
         self.assertEqual(temp_f[0].get('min'), '41')
         self.assertEqual(temp_f[0].get('max'), '104')
 
-        temp_f_in = editor_ids['tempFinput'].findall('range')
+        temp_f_in = editor_ids['TEMPFINPUT'].findall('range')
         self.assertEqual(len(temp_f_in), 1)
         self.assertEqual(temp_f_in[0].get('uom'), '17')
 
-        temp_c = editor_ids['tempC'].findall('range')
+        temp_c = editor_ids['TEMPC'].findall('range')
         self.assertEqual(len(temp_c), 1)
         self.assertEqual(temp_c[0].get('uom'), '4')
         self.assertEqual(temp_c[0].get('min'), '5')
         self.assertEqual(temp_c[0].get('max'), '40')
 
-        temp_c_in = editor_ids['tempCinput'].findall('range')
+        temp_c_in = editor_ids['TEMPCINPUT'].findall('range')
         self.assertEqual(len(temp_c_in), 1)
         self.assertEqual(temp_c_in[0].get('uom'), '4')
 
-        # Verify tempF and tempC do not have step, while tempFinput and tempCinput have step="1"
+        # Verify TEMPF and TEMPC do not have step, while TEMPFINPUT and TEMPCINPUT have step="1"
         self.assertIsNone(temp_f[0].get('step'))
         self.assertEqual(temp_f_in[0].get('step'), '1')
         self.assertIsNone(temp_c[0].get('step'))
@@ -445,9 +461,22 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertEqual(temp_f_in[0].get('prec'), '0')
         self.assertEqual(temp_c[0].get('prec'), '0')
         self.assertEqual(temp_c_in[0].get('prec'), '0')
+
+        # Verify HOLDMINS editor and absence of HOLDSTAT/HOLDTIME
+        self.assertIn('HOLDMINS', editor_ids)
+        self.assertNotIn('HOLDSTAT', editor_ids)
+        self.assertNotIn('HOLDTIME', editor_ids)
+
         hold_mins = editor_ids['HOLDMINS'].findall('range')
         self.assertEqual(hold_mins[0].get('step'), '1')
         self.assertEqual(hold_mins[0].get('prec'), '0')
+        self.assertEqual(hold_mins[0].get('uom'), '45')
+
+        online_stat = editor_ids['ONLINE'].findall('range')
+        self.assertEqual(len(online_stat), 1)
+        self.assertEqual(online_stat[0].get('uom'), '2')
+        self.assertEqual(online_stat[0].get('subset'), '0,1')
+        self.assertEqual(online_stat[0].get('nls'), 'ONLINE')
 
         # Check nodedefs.xml
         nodedefs_path = os.path.join(repo_dir, 'profile', 'nodedef', 'nodedefs.xml')
@@ -460,29 +489,52 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertIn('thermostatf', nodedef_map)
         self.assertIn('thermostatc', nodedef_map)
 
-        # Verify thermostatf uses non-input editor tempF and explicit sends
+        # Verify controller sts
+        sts_ctl = {st.get('id'): st.get('editor') for st in nodedef_map['controller'].find('sts').findall('st')}
+        self.assertEqual(sts_ctl['ST'], 'ONLINE')
+        self.assertEqual(sts_ctl['TIME'], 'TIMESTAMP')
+
+        # Verify thermostatf uses non-input editor TEMPF and explicit sends
         self.assertIsNotNone(nodedef_map['thermostatf'].find('cmds').find('sends'))
         sts_f = {st.get('id'): st.get('editor') for st in nodedef_map['thermostatf'].find('sts').findall('st')}
-        self.assertEqual(sts_f['ST'], 'tempF')
-        self.assertEqual(sts_f['CLISPH'], 'tempF')
+        self.assertEqual(sts_f['ST'], 'TEMPF')
+        self.assertEqual(sts_f['CLISPH'], 'TEMPF')
+        self.assertEqual(sts_f['GV4'], 'HOLDMINS')
+        self.assertEqual(sts_f['GV5'], 'ONLINE')
+        self.assertNotIn('GV6', sts_f)
+        self.assertEqual(sts_f['TIME'], 'TIMESTAMP')
 
-        # Verify thermostatf accepts standard and dedicated commands
-        cmds_f = {cmd.get('id') for cmd in nodedef_map['thermostatf'].find('cmds').find('accepts').findall('cmd')}
-        self.assertIn('SET_HOLD', cmds_f)
-        self.assertIn('SET_PERM_HOLD', cmds_f)
-        self.assertIn('SET_AUTO', cmds_f)
+        # Verify thermostatf accepts standard and dedicated commands with UPPERCASE parameter IDs
+        cmds_f = {cmd.get('id'): cmd for cmd in nodedef_map['thermostatf'].find('cmds').find('accepts').findall('cmd')}
+        self.assertIn('SETHOLD', cmds_f)
+        self.assertIn('SETPERMHOLD', cmds_f)
+        self.assertIn('SETAUTO', cmds_f)
+        params_f = {p.get('id'): p.get('editor') for p in cmds_f['SETHOLD'].findall('p')}
+        self.assertEqual(params_f['TEMPHOLDF'], 'TEMPFINPUT')
+        self.assertEqual(params_f['HOLD'], 'HOLDMINS')
+        self.assertNotIn('tempholdF', params_f)
+        self.assertNotIn('hold', params_f)
 
-        # Verify thermostatc uses non-input editor tempC and explicit sends
+        # Verify thermostatc uses non-input editor TEMPC and explicit sends
         self.assertIsNotNone(nodedef_map['thermostatc'].find('cmds').find('sends'))
         sts_c = {st.get('id'): st.get('editor') for st in nodedef_map['thermostatc'].find('sts').findall('st')}
-        self.assertEqual(sts_c['ST'], 'tempC')
-        self.assertEqual(sts_c['CLISPH'], 'tempC')
+        self.assertEqual(sts_c['ST'], 'TEMPC')
+        self.assertEqual(sts_c['CLISPH'], 'TEMPC')
+        self.assertEqual(sts_c['GV4'], 'HOLDMINS')
+        self.assertEqual(sts_c['GV5'], 'ONLINE')
+        self.assertNotIn('GV6', sts_c)
+        self.assertEqual(sts_c['TIME'], 'TIMESTAMP')
 
-        # Verify thermostatc accepts standard and dedicated commands
-        cmds_c = {cmd.get('id') for cmd in nodedef_map['thermostatc'].find('cmds').find('accepts').findall('cmd')}
-        self.assertIn('SET_HOLD', cmds_c)
-        self.assertIn('SET_PERM_HOLD', cmds_c)
-        self.assertIn('SET_AUTO', cmds_c)
+        # Verify thermostatc accepts standard and dedicated commands with UPPERCASE parameter IDs
+        cmds_c = {cmd.get('id'): cmd for cmd in nodedef_map['thermostatc'].find('cmds').find('accepts').findall('cmd')}
+        self.assertIn('SETHOLD', cmds_c)
+        self.assertIn('SETPERMHOLD', cmds_c)
+        self.assertIn('SETAUTO', cmds_c)
+        params_c = {p.get('id'): p.get('editor') for p in cmds_c['SETHOLD'].findall('p')}
+        self.assertEqual(params_c['TEMPHOLDC'], 'TEMPCINPUT')
+        self.assertEqual(params_c['HOLD'], 'HOLDMINS')
+        self.assertNotIn('tempholdC', params_c)
+        self.assertNotIn('hold', params_c)
 
         # Check en_us.txt
         nls_path = os.path.join(repo_dir, 'profile', 'nls', 'en_us.txt')
@@ -495,10 +547,24 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertNotIn('ND-thermostat_c-NAME', nls_content)
         self.assertNotIn('ND-THERMOSTAT_F-NAME', nls_content)
         self.assertNotIn('ND-THERMOSTAT_C-NAME', nls_content)
-        self.assertIn('HOLDNAMES-0 = Schedule', nls_content)
-        self.assertIn('HOLDNAMES-1 = Permanent Hold', nls_content)
-        self.assertNotIn('HOLD_NAMES-0 = Schedule', nls_content)
-        self.assertNotIn('HOLD_NAMES-1 = Permanent Hold', nls_content)
+        self.assertIn('CMD-TSTAT-SETAUTO-NAME', nls_content)
+        self.assertIn('CMD-TSTAT-SETHOLD-NAME', nls_content)
+        self.assertIn('CMD-TSTAT-SETPERMHOLD-NAME', nls_content)
+        self.assertIn('CMDP-TEMPHOLDF-NAME = Hold Temperature', nls_content)
+        self.assertIn('CMDP-TEMPHOLDC-NAME = Hold Temperature', nls_content)
+        self.assertIn('CMDP-HOLD-NAME = Hold Minutes', nls_content)
+        self.assertNotIn('CMDP-tempholdF-NAME', nls_content)
+        self.assertNotIn('CMDP-tempholdC-NAME', nls_content)
+        self.assertNotIn('CMDP-hold-NAME', nls_content)
+        self.assertIn('ONLINE-0 = Offline', nls_content)
+        self.assertIn('ONLINE-1 = Online', nls_content)
+        self.assertNotIn('BOOL-0', nls_content)
+        self.assertNotIn('BOOL-1', nls_content)
+        self.assertNotIn('HOLDSTAT', nls_content)
+        self.assertNotIn('HOLDNAMES', nls_content)
+        self.assertNotIn('HOLD_NAMES', nls_content)
+        self.assertIn('ST-TSTAT-GV4-NAME = Hold Time', nls_content)
+        self.assertNotIn('GV6', nls_content)
 
     def test_thermostat_subclasses_f_and_c(self):
         node_f = ThermostatNode_F(self.mock_poly, '112233', '112233', 'Test F')
@@ -506,12 +572,18 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertEqual(node_f.temp_uom, 17)
         self.assertEqual(node_f.drivers[0]['uom'], 17)
         self.assertEqual(node_f.drivers[1]['uom'], 17)
+        gv4_f = [d for d in node_f.drivers if d['driver'] == 'GV4'][0]
+        self.assertEqual(gv4_f['uom'], 45)
+        self.assertNotIn('GV6', [d['driver'] for d in node_f.drivers])
 
         node_c = ThermostatNode_C(self.mock_poly, '445566', '445566', 'Test C')
         self.assertEqual(node_c.id, 'thermostatc')
         self.assertEqual(node_c.temp_uom, 4)
         self.assertEqual(node_c.drivers[0]['uom'], 4)
         self.assertEqual(node_c.drivers[1]['uom'], 4)
+        gv4_c = [d for d in node_c.drivers if d['driver'] == 'GV4'][0]
+        self.assertEqual(gv4_c['uom'], 45)
+        self.assertNotIn('GV6', [d['driver'] for d in node_c.drivers])
 
     def test_controller_serial_1_by_1_node_creation(self):
         controller = Controller(self.mock_poly, 'controller', 'controller', 'NuHeat')

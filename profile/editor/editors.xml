@@ -1,7 +1,7 @@
 <editors>
-  <!-- Boolean -->
-  <editor id="bool">
-    <range uom="2" subset="0,1" nls="BOOL" />
+  <!-- Online Status -->
+  <editor id="ONLINE">
+    <range uom="2" subset="0,1" nls="ONLINE" />
   </editor>
 
   <!-- Heat State -->
@@ -15,30 +15,25 @@
   </editor>
 
   <!-- Temperature Fahrenheit (Display & Driver) -->
-  <editor id="tempF">
+  <editor id="TEMPF">
     <range uom="17" min="41" max="104" prec="0" />
   </editor>
 
   <!-- Temperature Fahrenheit (Command Input) -->
-  <editor id="tempFinput">
+  <editor id="TEMPFINPUT">
     <range uom="17" min="41" max="104" prec="0" step="1" />
   </editor>
 
   <!-- Temperature Celsius (Display & Driver) -->
-  <editor id="tempC">
+  <editor id="TEMPC">
     <range uom="4" min="5" max="40" prec="0" />
   </editor>
 
   <!-- Temperature Celsius (Command Input) -->
-  <editor id="tempCinput">
+  <editor id="TEMPCINPUT">
     <range uom="4" min="5" max="40" prec="0" step="1" />
   </editor>
 
-  <!-- Hold End Time (Unix timestamp or special state) -->
-  <editor id="HOLDTIME">
-    <range uom="25" subset="0,1" nls="HOLDNAMES" />
-    <range uom="151" min="0" max="4294967295" prec="0" />
-  </editor>
 
   <!-- Hold Duration Minutes -->
   <editor id="HOLDMINS">
@@ -51,8 +46,7 @@
   </editor>
 
   <!-- Timestamp (Epoch seconds) -->
-  <editor id="timestamp">
+  <editor id="TIMESTAMP">
     <range uom="151" min="0" max="4294967295" prec="0" />
   </editor>
 </editors>
-

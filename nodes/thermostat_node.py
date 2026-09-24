@@ -8,10 +8,20 @@ from .base import LOGGER, BaseNode
 def _get_param(command, param_name, default=None):
     if not isinstance(command, dict):
         return default
+    p_lower = str(param_name).lower()
     query = command.get("query")
     if isinstance(query, dict):
-        if param_name in query:
-            return query[param_name]
+        for k, v in query.items():
+            if k == "uom":
+                continue
+            k_lower = k.lower()
+            base_key = k_lower.split('.')[0]
+            if base_key == p_lower:
+                return v
+            if p_lower == "temp" and "temp" in base_key:
+                return v
+            if p_lower == "hold" and base_key in ("hold", "holdmins", "mins", "duration"):
+                return v
         # When command parameter id in nodedefs.xml is empty (id=""), PG3 passes query keys like '' or '.uom17'
         if "" in query:
             return query[""]
@@ -20,27 +30,27 @@ def _get_param(command, param_name, default=None):
                 continue
             if k.startswith(".uom"):
                 return v
-            if k.startswith(f"{param_name}."):
-                return v
-            if param_name == "temp" and "temp" in k.lower():
-                return v
-    if param_name in command:
-        return command[param_name]
-    if "" in command:
-        return command[""]
-    # Single-parameter commands (like SET_PERM_HOLD with id="") deliver their parameter in command['value']
-    if param_name == "temp" and "value" in command and command["value"] is not None:
-        if str(command.get("uom")) != "25" and command.get("cmd") != "CLIMD":
-            return command["value"]
+
     for k, v in command.items():
         if k in ("address", "cmd", "uom", "query", "value"):
             continue
+        k_lower = k.lower()
+        base_key = k_lower.split('.')[0]
+        if base_key == p_lower:
+            return v
+        if p_lower == "temp" and "temp" in base_key:
+            return v
+        if p_lower == "hold" and base_key in ("hold", "holdmins", "mins", "duration"):
+            return v
         if k.startswith(".uom"):
             return v
-        if k.startswith(f"{param_name}."):
-            return v
-        if param_name == "temp" and "temp" in k.lower():
-            return v
+
+    if "" in command:
+        return command[""]
+    # Single-parameter commands (like SET_PERM_HOLD with id="") deliver their parameter in command['value']
+    if p_lower == "temp" and "value" in command and command["value"] is not None:
+        if str(command.get("uom")) != "25" and command.get("cmd") != "CLIMD":
+            return command["value"]
     return default
 
 
@@ -56,7 +66,7 @@ class ThermostatNode(BaseNode):
         {'driver': 'GV1', 'value': 0, 'uom': 33},
         {'driver': 'GV2', 'value': 0, 'uom': 33},
         {'driver': 'GV3', 'value': 0, 'uom': 33},
-        {'driver': 'GV4', 'value': 0, 'uom': 25},
+        {'driver': 'GV4', 'value': 0, 'uom': 45},
         {'driver': 'GV5', 'value': 1, 'uom': 2},
         {'driver': 'TIME', 'value': 0, 'uom': 151}
     ]
@@ -86,7 +96,7 @@ class ThermostatNode(BaseNode):
                 {'driver': 'GV1', 'value': 0, 'uom': 33},
                 {'driver': 'GV2', 'value': 0, 'uom': 33},
                 {'driver': 'GV3', 'value': 0, 'uom': 33},
-                {'driver': 'GV4', 'value': 0, 'uom': 25},
+                {'driver': 'GV4', 'value': 0, 'uom': 45},
                 {'driver': 'GV5', 'value': 1, 'uom': 2},
                 {'driver': 'TIME', 'value': 0, 'uom': 151}
             ]
@@ -132,7 +142,7 @@ class ThermostatNode(BaseNode):
                 # Auto (Follow Schedule)
                 self.setDriver('CLIMD', 1, uom=25)
                 self.setDriver('CLISPH', clisph, uom=self.temp_uom)
-                self.setDriver('GV4', 0, uom=25)
+                self.setDriver('GV4', 0, uom=45)
             elif mode_val == 2:
                 # Temporary Hold
                 self.setDriver('CLIMD', 2, uom=25)
@@ -146,14 +156,16 @@ class ThermostatNode(BaseNode):
                     except Exception as e:
                         LOGGER.warning(f"Could not parse holdUntil '{hold_until}': {e}")
                 if hold_end_ts is not None and hold_end_ts > 0:
-                    self.setDriver('GV4', hold_end_ts, uom=151)
+                    now_ts = int(time.time())
+                    remaining_mins = max(0, round((hold_end_ts - now_ts) / 60))
+                    self.setDriver('GV4', remaining_mins, uom=45)
                 else:
-                    self.setDriver('GV4', 0, uom=25)
+                    self.setDriver('GV4', 0, uom=45)
             else:
                 # 3 = Permanent Hold (Manual) - hold duration is permanent
                 self.setDriver('CLIMD', 3, uom=25)
                 self.setDriver('CLISPH', clisph, uom=self.temp_uom)
-                self.setDriver('GV4', 1, uom=25)
+                self.setDriver('GV4', 0, uom=45)
 
             online_val = 1 if stat.get('online', True) else 0
             self.setDriver('GV5', online_val, uom=2)
@@ -230,7 +242,7 @@ class ThermostatNode(BaseNode):
         ok = nuheat_client.set_mode_auto(self.address)
         if ok:
             self.setDriver('CLIMD', 1, uom=25)
-            self.setDriver('GV4', 0, uom=25)
+            self.setDriver('GV4', 0, uom=45)
             self.setDriver('TIME', int(time.time()), uom=151)
             return True
         else:
@@ -268,7 +280,7 @@ class ThermostatNode(BaseNode):
         if ok:
             self.setDriver('CLIMD', 3, uom=25)
             self.setDriver('CLISPH', temp, uom=self.temp_uom)
-            self.setDriver('GV4', 1, uom=25)
+            self.setDriver('GV4', 0, uom=45)
             self.setDriver('TIME', int(time.time()), uom=151)
             return True
         else:
@@ -307,13 +319,14 @@ class ThermostatNode(BaseNode):
         now_utc = datetime.now(timezone.utc)
         if hold_val > 100000:
             stop_utc = datetime.fromtimestamp(hold_val, timezone.utc)
+            hold_mins = max(0, round((stop_utc.timestamp() - now_utc.timestamp()) / 60))
         else:
             if hold_val <= 0:
                 hold_val = 60
             stop_utc = now_utc + timedelta(minutes=hold_val)
+            hold_mins = hold_val
 
         hold_until_str = stop_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
-        hold_end_ts = int(stop_utc.timestamp())
 
         if self.temp_uom == 17:
             new_setpoint = nuheat_client.nuheat_fahrenheit_to_celsius_json(temp)
@@ -324,7 +337,7 @@ class ThermostatNode(BaseNode):
         if ok:
             self.setDriver('CLIMD', 2, uom=25)
             self.setDriver('CLISPH', temp, uom=self.temp_uom)
-            self.setDriver('GV4', hold_end_ts, uom=151)
+            self.setDriver('GV4', hold_mins, uom=45)
             self.setDriver('TIME', int(time.time()), uom=151)
             return True
         else:
@@ -333,6 +346,10 @@ class ThermostatNode(BaseNode):
 
     commands = {
         'UPDATE': force_update,
+        'SETAUTO': set_auto,
+        'SETHOLD': set_hold,
+        'SETPERMHOLD': set_permanent_hold,
+        # Backwards compatibility for ISY programs and earlier profiles
         'SET_AUTO': set_auto,
         'SET_HOLD': set_hold,
         'SET_PERM_HOLD': set_permanent_hold,
@@ -350,7 +367,7 @@ class ThermostatNode_F(ThermostatNode):
         {'driver': 'GV1', 'value': 0, 'uom': 33},
         {'driver': 'GV2', 'value': 0, 'uom': 33},
         {'driver': 'GV3', 'value': 0, 'uom': 33},
-        {'driver': 'GV4', 'value': 0, 'uom': 25},
+        {'driver': 'GV4', 'value': 0, 'uom': 45},
         {'driver': 'GV5', 'value': 1, 'uom': 2},
         {'driver': 'TIME', 'value': 0, 'uom': 151}
     ]
@@ -370,7 +387,7 @@ class ThermostatNode_C(ThermostatNode):
         {'driver': 'GV1', 'value': 0, 'uom': 33},
         {'driver': 'GV2', 'value': 0, 'uom': 33},
         {'driver': 'GV3', 'value': 0, 'uom': 33},
-        {'driver': 'GV4', 'value': 0, 'uom': 25},
+        {'driver': 'GV4', 'value': 0, 'uom': 45},
         {'driver': 'GV5', 'value': 1, 'uom': 2},
         {'driver': 'TIME', 'value': 0, 'uom': 151}
     ]
