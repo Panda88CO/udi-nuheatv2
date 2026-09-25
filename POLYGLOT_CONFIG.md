@@ -49,7 +49,7 @@ For each thermostat discovered on your account, nodes are created serially 1-by-
 1. **Controller Node** (`controller`):
    - **Status Drivers**:
      - NodeServer Online (`ST` — Online / Offline, UOM 2)
-     - Last Update (`TIME` — timestamp, UOM 151)
+     - Last Update (`TIME` — timestamp, UOM 151 on IoX 5.8+ / UOM 137 on ISY-994)
    - **Heartbeat**: Toggles `DON` / `DOF` on each short poll.
    - **Commands**:
      - **Update (`UPDATE`)**: Immediately force updates all nodes and energy logs.
@@ -62,7 +62,7 @@ For each thermostat discovered on your account, nodes are created serially 1-by-
      - Heat State (`CLIHCS` — Idle, Heating)
      - Hold Time (`GV4` — duration in minutes [UOM 45]; displays remaining minutes on Temporary Hold; 0 in Auto and Permanent Hold)
      - Online Status (`GV5` — Online / Offline, UOM 2)
-     - Last Update (`TIME` — timestamp, UOM 151)
+     - Last Update (`TIME` — timestamp, UOM 151 on IoX 5.8+ / UOM 137 on ISY-994)
      - Daily Energy (`GV0` — kWh, UOM 33)
      - Last 7 Days Energy (`GV1` — kWh, UOM 33)
      - Monthly Energy (`GV2` — kWh, UOM 33)

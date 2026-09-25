@@ -4,9 +4,9 @@ import time
 import requests
 import threading
 
-from nodes.base import LOGGER, BaseNode
+from nodes.base import LOGGER, BaseNode, get_current_timestamp, is_uom151_supported
 
-VERSION = "2.2.18"
+VERSION = "2.2.19"
 
 try:
     import udi_interface
@@ -56,40 +56,23 @@ from nodes import EnergyLogWeekNode
 from nodes import EnergyLogYearNode
 from nuheat import NuHeat
 
-'''
-def _build_profile_definition(temp_unit: str = "F") -> dict:
+def _build_profile_definition(temp_unit: str = "F", time_uom: int = 151) -> dict:
     """Build the dynamic JSON profile definition for PG3/PG3x.
 
-    CLITEMP supports both temperature UOMs: 'F' -> 17 and 'C' -> 4.
+    Dynamic profile includes all editors and nodedefs mirroring editors.xml and nodedefs.xml,
+    with TIMESTAMP editor dynamically assigned time_uom (151 for modern IoX, 137 for ISY-994).
     """
-    if temp_unit == "C":
-        clitempranges = [
-            {"uom": "4", "min": 5, "max": 40, "prec": 0},
-            {"uom": "25", "subset": "0,1", "names": {"0": "Schedule", "1": "Permanent Hold"}},
-        ]
-        clitemprangeinput = [
-            {"uom": "4", "min": 5, "max": 40, "step": 1},
-        ]
-    else:
-        clitempranges = [
-            {"uom": "17", "min": 41, "max": 104, "prec": 0},
-            {"uom": "25", "subset": "0,1", "names": {"0": "Schedule", "1": "Permanent Hold"}},
-        ]
-        clitemprangeinput = [
-            {"uom": "17", "min": 41, "max": 104, "step": 1},
-        ]
-
     editors = [
         {
             "id": "ONLINE",
             "ranges": [
-                {"uom": "2", "subset": "0-1", "names": {"0": "Offline", "1": "Online"}}
+                {"uom": "2", "subset": "0,1", "names": {"0": "Offline", "1": "Online"}}
             ],
         },
         {
             "id": "CLIHCS",
             "ranges": [
-                {"uom": "66", "subset": "0-1", "names": {"0": "Idle", "1": "Heating"}}
+                {"uom": "66", "subset": "0,1", "names": {"0": "Idle", "1": "Heating"}}
             ],
         },
         {
@@ -107,17 +90,33 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
             ],
         },
         {
-            "id": "CLITEMP",
-            "ranges": clitempranges,
+            "id": "TEMPF",
+            "ranges": [
+                {"uom": "17", "min": 41, "max": 104, "prec": 0}
+            ],
         },
         {
-            "id": "CLITEMPRANGEINPUT",
-            "ranges": clitemprangeinput,
+            "id": "TEMPFINPUT",
+            "ranges": [
+                {"uom": "17", "min": 41, "max": 104, "prec": 0, "step": 1}
+            ],
+        },
+        {
+            "id": "TEMPC",
+            "ranges": [
+                {"uom": "4", "min": 5, "max": 40, "prec": 0}
+            ],
+        },
+        {
+            "id": "TEMPCINPUT",
+            "ranges": [
+                {"uom": "4", "min": 5, "max": 40, "prec": 0, "step": 1}
+            ],
         },
         {
             "id": "HOLDMINS",
             "ranges": [
-                {"uom": "45", "min": 0, "max": 1440, "step": 1}
+                {"uom": "45", "min": 0, "max": 1440, "prec": 0, "step": 1}
             ],
         },
         {
@@ -129,7 +128,7 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
         {
             "id": "TIMESTAMP",
             "ranges": [
-                {"uom": "151", "min": 0, "max": 4294967295, "prec": 0}
+                {"uom": str(time_uom), "min": 0, "max": 4294967295, "prec": 0}
             ],
         },
     ]
@@ -155,12 +154,12 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
             "links": {"ctl": [], "rsp": []},
         },
         {
-            "id": "THERMOSTAT",
-            "name": "Thermostat Node",
+            "id": "thermostatf",
+            "name": "Thermostat Node (Fahrenheit)",
             "icon": "Thermostat",
             "properties": [
-                {"id": "ST", "name": "Current Temperature", "editor": "CLITEMP"},
-                {"id": "CLISPH", "name": "Heat Setpoint", "editor": "CLITEMP"},
+                {"id": "ST", "name": "Current Temperature", "editor": "TEMPF"},
+                {"id": "CLISPH", "name": "Heat Setpoint", "editor": "TEMPF"},
                 {"id": "CLIMD", "name": "Mode", "editor": "MODESEL"},
                 {"id": "CLIHCS", "name": "Heat State", "editor": "CLIHCS"},
                 {"id": "GV0", "name": "Daily Energy", "editor": "TPW"},
@@ -179,7 +178,7 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
                         "id": "SETHOLD",
                         "name": "Set Hold",
                         "parameters": [
-                            {"id": "TEMP", "name": "Temperature", "editor": "CLITEMPRANGEINPUT", "init": "CLISPH"},
+                            {"id": "TEMPHOLDF", "name": "Temperature", "editor": "TEMPFINPUT", "init": "CLISPH"},
                             {"id": "HOLD", "name": "Hold Minutes", "editor": "HOLDMINS"},
                         ],
                     },
@@ -187,7 +186,48 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
                         "id": "SETPERMHOLD",
                         "name": "Set Permanent Hold",
                         "parameters": [
-                            {"id": "TEMP", "name": "Temperature", "editor": "CLITEMPRANGEINPUT", "init": "CLISPH"},
+                            {"id": "", "name": "Temperature", "editor": "TEMPFINPUT", "init": "CLISPH"},
+                        ],
+                    },
+                ],
+                "sends": [],
+            },
+            "links": {"ctl": [], "rsp": []},
+        },
+        {
+            "id": "thermostatc",
+            "name": "Thermostat Node (Celsius)",
+            "icon": "Thermostat",
+            "properties": [
+                {"id": "ST", "name": "Current Temperature", "editor": "TEMPC"},
+                {"id": "CLISPH", "name": "Heat Setpoint", "editor": "TEMPC"},
+                {"id": "CLIMD", "name": "Mode", "editor": "MODESEL"},
+                {"id": "CLIHCS", "name": "Heat State", "editor": "CLIHCS"},
+                {"id": "GV0", "name": "Daily Energy", "editor": "TPW"},
+                {"id": "GV1", "name": "Last 7 Days Energy", "editor": "TPW"},
+                {"id": "GV2", "name": "Monthly Energy", "editor": "TPW"},
+                {"id": "GV3", "name": "Yearly Energy", "editor": "TPW"},
+                {"id": "GV4", "name": "Hold Time", "editor": "HOLDMINS"},
+                {"id": "GV5", "name": "Online", "editor": "ONLINE"},
+                {"id": "TIME", "name": "Last Update", "editor": "TIMESTAMP"},
+            ],
+            "cmds": {
+                "accepts": [
+                    {"id": "UPDATE", "name": "Force Update"},
+                    {"id": "SETAUTO", "name": "Set Auto"},
+                    {
+                        "id": "SETHOLD",
+                        "name": "Set Hold",
+                        "parameters": [
+                            {"id": "TEMPHOLDC", "name": "Temperature", "editor": "TEMPCINPUT", "init": "CLISPH"},
+                            {"id": "HOLD", "name": "Hold Minutes", "editor": "HOLDMINS"},
+                        ],
+                    },
+                    {
+                        "id": "SETPERMHOLD",
+                        "name": "Set Permanent Hold",
+                        "parameters": [
+                            {"id": "", "name": "Temperature", "editor": "TEMPCINPUT", "init": "CLISPH"},
                         ],
                     },
                 ],
@@ -198,6 +238,7 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
     ]
 
     return {
+        "version": VERSION,
         "delete": {
             "editors": ["*"],
             "nodedefs": ["*"],
@@ -208,7 +249,6 @@ def _build_profile_definition(temp_unit: str = "F") -> dict:
         "linkdefs": [],
     }
 
-'''
 class Controller(BaseNode):
     id = 'controller'
     drivers = [
@@ -239,6 +279,10 @@ class Controller(BaseNode):
         self.temperature_scale = None
         self.temp_unit = "F"
         self.temp_uom = 17
+        self.time_uom = 151 if is_uom151_supported(self.poly) else 137
+        for drv in self.drivers:
+            if isinstance(drv, dict) and drv.get('driver') == 'TIME':
+                drv['uom'] = self.time_uom
         self.tz = "America/New_York"
         self.disco = 0
 
@@ -344,22 +388,80 @@ class Controller(BaseNode):
             LOGGER.debug(f"[_wait_for_node_deleted] PG3 confirmed node {address} deleted")
         return deleted
 
-    def update_profile(self) -> None:
-        """Update ISY profile using static profile files in profile/."""
-        if hasattr(self.poly, "updateProfile"):
-            try:
-                LOGGER.info("Updating profile from static profile directory...")
-                self.poly.updateProfile()
-                if hasattr(self.poly, "Notices") and hasattr(self.poly.Notices, "delete"):
-                    self.poly.Notices.delete("profile")
-            except Exception as err:
-                LOGGER.error(f"Static profile update failed: {err}")
-                if hasattr(self.poly, "Notices") and hasattr(self.poly.Notices, "__setitem__"):
-                    self.poly.Notices["profile"] = f"Profile update failed: {err}"
+    def get_current_time(self) -> int:
+        """Return the current timestamp formatted for the target time_uom."""
+        return get_current_timestamp(self.time_uom)
+
+    def _profiles_match(self, current_profile, expected_profile) -> bool:
+        if not isinstance(current_profile, dict) or not isinstance(expected_profile, dict):
+            return False
+        return all(
+            current_profile.get(k, []) == expected_profile.get(k, [])
+            for k in ("editors", "nodedefs", "linkdefs")
+        )
 
     def _publish_profile(self, wait_response: bool = False) -> None:
-        """Backwards compatibility alias for update_profile."""
-        self.update_profile()
+        """Publish dynamic JSON profile if supported (Approach A), or fall back to static profile files."""
+        self.time_uom = 151 if is_uom151_supported(self.poly) else 137
+        for drv in self.drivers:
+            if isinstance(drv, dict) and drv.get('driver') == 'TIME':
+                drv['uom'] = self.time_uom
+
+        update_json_profile = getattr(self.poly, "updateJsonProfile", None)
+        if not callable(update_json_profile):
+            LOGGER.info("[_publish_profile] updateJsonProfile is unavailable, falling back to updateProfile")
+            if hasattr(self.poly, "updateProfile"):
+                try:
+                    self.poly.updateProfile()
+                    if hasattr(self.poly, "Notices") and hasattr(self.poly.Notices, "delete"):
+                        self.poly.Notices.delete("profile")
+                except Exception as err:
+                    LOGGER.error(f"Static profile update failed: {err}")
+                    if hasattr(self.poly, "Notices") and hasattr(self.poly.Notices, "__setitem__"):
+                        self.poly.Notices["profile"] = f"Profile update failed: {err}"
+            elif hasattr(self.poly, "installprofile"):
+                self.poly.installprofile()
+            return
+
+        profile = _build_profile_definition(self.temp_unit, time_uom=self.time_uom)
+
+        current_profile_getter = getattr(self.poly, "getJsonProfile", None)
+        if callable(current_profile_getter):
+            try:
+                current_profile = current_profile_getter({"waitResponse": False})
+                if self._profiles_match(current_profile, profile):
+                    LOGGER.info("[_publish_profile] Profile already up to date, skipping publish")
+                    return
+            except TypeError:
+                try:
+                    current_profile = current_profile_getter()
+                    if self._profiles_match(current_profile, profile):
+                        LOGGER.info("[_publish_profile] Profile already up to date, skipping publish")
+                        return
+                except Exception as err:
+                    LOGGER.warning(f"[_publish_profile] Unable to read existing profile: {err}")
+            except Exception as err:
+                LOGGER.warning(f"[_publish_profile] Unable to read existing profile: {err}")
+
+        try:
+            LOGGER.debug(f"[_publish_profile] Publishing dynamic profile: {json.dumps(profile, sort_keys=True, indent=2)}")
+            update_json_profile(profile, {"waitResponse": wait_response})
+            LOGGER.info(f"[_publish_profile] Dynamic JSON profile published successfully (time_uom={self.time_uom})")
+            if hasattr(self.poly, "Notices") and hasattr(self.poly.Notices, "delete"):
+                self.poly.Notices.delete("profile")
+        except TypeError:
+            update_json_profile(profile)
+            LOGGER.info(f"[_publish_profile] Dynamic JSON profile published successfully (time_uom={self.time_uom})")
+            if hasattr(self.poly, "Notices") and hasattr(self.poly.Notices, "delete"):
+                self.poly.Notices.delete("profile")
+        except Exception as err:
+            LOGGER.error(f"[_publish_profile] Profile publish failed: {err}")
+            if hasattr(self.poly, "Notices") and hasattr(self.poly.Notices, "__setitem__"):
+                self.poly.Notices["profile"] = f"Dynamic profile publish failed: {err}"
+
+    def update_profile(self, command=None) -> None:
+        """Update ISY profile dynamically (Approach A) or via static files."""
+        self._publish_profile(wait_response=True)
 
     def _determine_temp_unit(self) -> str:
         """Determine temperature scale ('F' or 'C') from customParams or NuHeat account API."""
@@ -596,9 +698,12 @@ class Controller(BaseNode):
             time.sleep(1)
             wait_seconds += 1
 
-        self.update_oauth_config()
+        self.time_uom = 151 if is_uom151_supported(self.poly) else 137
+        for drv in self.drivers:
+            if isinstance(drv, dict) and drv.get('driver') == 'TIME':
+                drv['uom'] = self.time_uom
         self.setDriver('ST', 1, uom=2)
-        self.setDriver('TIME', int(time.time()), uom=151)
+        self.setDriver('TIME', self.get_current_time(), uom=self.time_uom)
         self.update_profile()
 
         if not self.is_oauth_configured():
@@ -623,7 +728,7 @@ class Controller(BaseNode):
                 self.Notices['auth'] = "Please click 'Authenticate' in the PG3 dashboard to link your NuHeat account."
 
     def poll(self, polltype):
-        self.setDriver('TIME', int(time.time()), uom=151)
+        self.setDriver('TIME', self.get_current_time(), uom=self.time_uom)
         if 'shortPoll' in polltype:
             self.shortPoll()
         elif 'longPoll' in polltype:
@@ -776,7 +881,7 @@ class Controller(BaseNode):
     def update_nodes(self, command=None):
         """Forces an immediate update across all nodes (executes longPoll)."""
         LOGGER.info('Forcing update across all nodes...')
-        self.setDriver('TIME', int(time.time()), uom=151)
+        self.setDriver('TIME', self.get_current_time(), uom=self.time_uom)
         self.longPoll()
         return True
 

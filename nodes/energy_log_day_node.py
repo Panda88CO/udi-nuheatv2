@@ -2,7 +2,7 @@ import time
 from datetime import datetime
 import pytz
 
-from .base import LOGGER, BaseNode
+from .base import LOGGER, BaseNode, get_current_timestamp
 
 
 class EnergyLogDayNode(BaseNode):
@@ -42,7 +42,15 @@ class EnergyLogDayNode(BaseNode):
         if energy_used is not None:
             self.setDriver('GV0', energy_used[0], uom=45)
             self.setDriver('ST', energy_used[1], uom=33)
-            self.setDriver('TIME', int(time.time()), uom=151)
+            time_uom = 151
+            if self.controller and hasattr(self.controller, 'time_uom'):
+                val = getattr(self.controller, 'time_uom', None)
+                if isinstance(val, (int, str)):
+                    try:
+                        time_uom = int(val)
+                    except (ValueError, TypeError):
+                        time_uom = 151
+            self.setDriver('TIME', get_current_timestamp(time_uom), uom=time_uom)
         else:
             LOGGER.error(f"Energy Log Day returned None for {stat_id}")
 

@@ -2,7 +2,7 @@ import time
 from datetime import datetime, timezone, timedelta
 import pytz
 
-from .base import LOGGER, BaseNode
+from .base import LOGGER, BaseNode, get_current_timestamp, is_uom151_supported
 
 
 def _get_param(command, param_name, default=None):
@@ -71,19 +71,46 @@ class ThermostatNode(BaseNode):
         {'driver': 'TIME', 'value': 0, 'uom': 151}
     ]
 
-    def __init__(self, polyglot, primary, address, name, controller=None, temp_uom=None):
+    def __init__(self, polyglot, primary, address, name, controller=None, temp_uom=None, time_uom=None):
         if controller is None and hasattr(polyglot, 'poly'):
             controller = polyglot
             polyglot = polyglot.poly
         super(ThermostatNode, self).__init__(polyglot, primary, address, name)
         self.controller = controller
 
-        if temp_uom is not None:
-            self.temp_uom = int(temp_uom)
+        if temp_uom is not None and isinstance(temp_uom, (int, str)):
+            try:
+                self.temp_uom = int(temp_uom)
+            except (ValueError, TypeError):
+                self.temp_uom = 17
         elif controller and hasattr(controller, 'temp_uom'):
-            self.temp_uom = int(controller.temp_uom)
+            val = getattr(controller, 'temp_uom', None)
+            if isinstance(val, (int, str)):
+                try:
+                    self.temp_uom = int(val)
+                except (ValueError, TypeError):
+                    self.temp_uom = 17
+            else:
+                self.temp_uom = 17
         else:
             self.temp_uom = 17
+
+        if time_uom is not None and isinstance(time_uom, (int, str)):
+            try:
+                self.time_uom = int(time_uom)
+            except (ValueError, TypeError):
+                self.time_uom = 151 if is_uom151_supported(polyglot) else 137
+        elif controller and hasattr(controller, 'time_uom'):
+            val = getattr(controller, 'time_uom', None)
+            if isinstance(val, (int, str)):
+                try:
+                    self.time_uom = int(val)
+                except (ValueError, TypeError):
+                    self.time_uom = 151 if is_uom151_supported(polyglot) else 137
+            else:
+                self.time_uom = 151 if is_uom151_supported(polyglot) else 137
+        else:
+            self.time_uom = 151 if is_uom151_supported(polyglot) else 137
 
         if self.temp_uom == 4 and getattr(self, 'id', None) in ('thermostatf', 'thermostat_f', 'THERMOSTAT_F', 'thermostatF'):
             self.id = 'thermostatc'
@@ -98,8 +125,12 @@ class ThermostatNode(BaseNode):
                 {'driver': 'GV3', 'value': 0, 'uom': 33},
                 {'driver': 'GV4', 'value': 0, 'uom': 45},
                 {'driver': 'GV5', 'value': 1, 'uom': 2},
-                {'driver': 'TIME', 'value': 0, 'uom': 151}
+                {'driver': 'TIME', 'value': 0, 'uom': self.time_uom}
             ]
+        else:
+            for drv in self.drivers:
+                if isinstance(drv, dict) and drv.get('driver') == 'TIME':
+                    drv['uom'] = self.time_uom
 
     def start(self):
         self.update_info()
@@ -170,11 +201,11 @@ class ThermostatNode(BaseNode):
             online_val = 1 if stat.get('online', True) else 0
             self.setDriver('GV5', online_val, uom=2)
 
-            self.setDriver('TIME', int(time.time()), uom=151)
+            self.setDriver('TIME', get_current_timestamp(self.time_uom), uom=self.time_uom)
         else:
             LOGGER.error(f"Thermostat {self.address} not available or returned None")
             self.setDriver('GV5', 0, uom=2)
-            self.setDriver('TIME', int(time.time()), uom=151)
+            self.setDriver('TIME', get_current_timestamp(self.time_uom), uom=self.time_uom)
 
     def update_energy(self, force: bool = False):
         nuheat_client = getattr(self.controller, 'NuHeat', None)
@@ -217,7 +248,7 @@ class ThermostatNode(BaseNode):
         year_val = year_used[1] if year_used is not None else 0.0
         self.setDriver('GV3', year_val, uom=33)
 
-        self.setDriver('TIME', int(time.time()), uom=151)
+        self.setDriver('TIME', get_current_timestamp(self.time_uom), uom=self.time_uom)
 
         LOGGER.info(
             f"Thermostat {self.address} ({self.name}) Energy Updated -> "
@@ -243,7 +274,7 @@ class ThermostatNode(BaseNode):
         if ok:
             self.setDriver('CLIMD', 1, uom=25)
             self.setDriver('GV4', 0, uom=45)
-            self.setDriver('TIME', int(time.time()), uom=151)
+            self.setDriver('TIME', get_current_timestamp(self.time_uom), uom=self.time_uom)
             return True
         else:
             LOGGER.error(f"set_mode_auto failed for {self.address}")
@@ -281,7 +312,7 @@ class ThermostatNode(BaseNode):
             self.setDriver('CLIMD', 3, uom=25)
             self.setDriver('CLISPH', temp, uom=self.temp_uom)
             self.setDriver('GV4', 0, uom=45)
-            self.setDriver('TIME', int(time.time()), uom=151)
+            self.setDriver('TIME', get_current_timestamp(self.time_uom), uom=self.time_uom)
             return True
         else:
             LOGGER.error(f"set_mode_manual failed for {self.address}")
@@ -338,7 +369,7 @@ class ThermostatNode(BaseNode):
             self.setDriver('CLIMD', 2, uom=25)
             self.setDriver('CLISPH', temp, uom=self.temp_uom)
             self.setDriver('GV4', hold_mins, uom=45)
-            self.setDriver('TIME', int(time.time()), uom=151)
+            self.setDriver('TIME', get_current_timestamp(self.time_uom), uom=self.time_uom)
             return True
         else:
             LOGGER.error(f"set_mode_hold failed for {self.address}")
@@ -372,8 +403,8 @@ class ThermostatNode_F(ThermostatNode):
         {'driver': 'TIME', 'value': 0, 'uom': 151}
     ]
 
-    def __init__(self, polyglot, primary, address, name, controller=None, temp_uom=17):
-        super(ThermostatNode_F, self).__init__(polyglot, primary, address, name, controller=controller, temp_uom=17)
+    def __init__(self, polyglot, primary, address, name, controller=None, temp_uom=17, time_uom=None):
+        super(ThermostatNode_F, self).__init__(polyglot, primary, address, name, controller=controller, temp_uom=17, time_uom=time_uom)
 
 
 class ThermostatNode_C(ThermostatNode):
@@ -392,6 +423,6 @@ class ThermostatNode_C(ThermostatNode):
         {'driver': 'TIME', 'value': 0, 'uom': 151}
     ]
 
-    def __init__(self, polyglot, primary, address, name, controller=None, temp_uom=4):
-        super(ThermostatNode_C, self).__init__(polyglot, primary, address, name, controller=controller, temp_uom=4)
+    def __init__(self, polyglot, primary, address, name, controller=None, temp_uom=4, time_uom=None):
+        super(ThermostatNode_C, self).__init__(polyglot, primary, address, name, controller=controller, temp_uom=4, time_uom=time_uom)
 

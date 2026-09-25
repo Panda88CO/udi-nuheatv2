@@ -63,7 +63,7 @@ The NodeServer automatically detects your account's preferred temperature scale 
 - **Controller Node**:
   - **Drivers**:
     - **NodeServer Online (`ST`)**: Indicates whether the NodeServer process is running and connected (Online / Offline, UOM 2).
-    - **Last Update (`TIME`)**: Unix epoch timestamp (UOM 151) of the last successful communication/poll with the controller.
+    - **Last Update (`TIME`)**: Timestamp (UOM 151 on IoX 5.8+ / UOM 137 on ISY-994) of the last successful communication/poll with the controller.
   - **Heartbeat (`DON` / `DOF`)**: Emits alternating `DON` and `DOF` control events on each short poll for ISY watchdog / heartbeat monitoring programs.
   - **Commands**:
     - **Update (`UPDATE`)**: Immediately forces an update across all nodes and queries fresh energy metrics (executes long poll).
@@ -74,7 +74,7 @@ The NodeServer automatically detects your account's preferred temperature scale 
   - **Heat State (`CLIHCS`)**: Idle or Heating.
   - **Hold Time (`GV4`)**: Duration in minutes (UOM 45); displays remaining minutes on Temporary Hold; 0 in Auto and Permanent Hold.
   - **Online Status (`GV5`)**: Thermostat connection status (Online / Offline, UOM 2).
-  - **Last Update (`TIME`)**: Unix epoch timestamp (UOM 151) of the last data refresh for this thermostat.
+  - **Last Update (`TIME`)**: Timestamp (UOM 151 on IoX 5.8+ / UOM 137 on ISY-994) of the last data refresh for this thermostat.
   - **Commands**:
     - **Set Auto (`SETAUTO`)**: Sets thermostat to follow internal schedule.
     - **Set Hold (`SETHOLD`)**: Sets temporary hold with target temperature and hold duration in minutes.

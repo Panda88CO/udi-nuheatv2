@@ -1,4 +1,75 @@
 import logging
+import time
+
+# NTP epoch offset: Seconds between 1900-01-01 00:00:00 UTC and 1970-01-01 00:00:00 UTC
+# 70 years (17 leap years: 1904, 1908 ... 1968) = 25567 days * 86400 s/day = 2,208,988,800 seconds
+NTP_EPOCH_OFFSET = 2208988800
+
+
+def get_current_timestamp(uom: int = 151) -> int:
+    """Return the current timestamp formatted for the target UOM.
+
+    - UOM 151: Unix timestamp (seconds since Jan 1, 1970 00:00:00 UTC).
+    - UOM 137: Seconds since Jan 1, 1900 00:00:00 UTC (NTP / ISY epoch, offset +2208988800).
+    """
+    now = int(time.time())
+    if int(uom) == 137:
+        return now + NTP_EPOCH_OFFSET
+    return now
+
+
+def is_uom151_supported(poly) -> bool:
+    """Check if ISY/IoX firmware supports UOM 151 (IoX 5.8.0+)."""
+    isy_ver = None
+    if poly is not None:
+        if hasattr(poly, 'pg3init') and isinstance(poly.pg3init, dict):
+            val = poly.pg3init.get('isyVersion')
+            if isinstance(val, str) and val.strip():
+                isy_ver = val.strip()
+        if not isy_ver and hasattr(poly, 'serverdata') and isinstance(poly.serverdata, dict):
+            val = poly.serverdata.get('isyVersion')
+            if isinstance(val, str) and val.strip():
+                isy_ver = val.strip()
+        if not isy_ver and hasattr(poly, 'getIsyVersion') and callable(poly.getIsyVersion):
+            try:
+                val = poly.getIsyVersion()
+                if isinstance(val, str) and val.strip():
+                    isy_ver = val.strip()
+            except Exception:
+                pass
+        if not isy_ver and hasattr(poly, 'isyVersion'):
+            try:
+                val = poly.isyVersion() if callable(poly.isyVersion) else poly.isyVersion
+                if isinstance(val, str) and val.strip():
+                    isy_ver = val.strip()
+            except Exception:
+                pass
+
+    if not isy_ver:
+        # Default to modern IoX (True) if version cannot be determined
+        return True
+
+    try:
+        parts = []
+        for p in str(isy_ver).split('.'):
+            digits = ''
+            for ch in p:
+                if ch.isdigit():
+                    digits += ch
+                else:
+                    break
+            if digits:
+                parts.append(int(digits))
+            else:
+                break
+        if len(parts) >= 2:
+            while len(parts) < 3:
+                parts.append(0)
+            return tuple(parts[:3]) >= (5, 8, 0)
+        return True
+    except Exception:
+        return True
+
 
 try:
     import udi_interface
