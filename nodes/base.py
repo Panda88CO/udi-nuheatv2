@@ -1,21 +1,9 @@
 import logging
 import time
 
-# NTP epoch offset: Seconds between 1900-01-01 00:00:00 UTC and 1970-01-01 00:00:00 UTC
-# 70 years (17 leap years: 1904, 1908 ... 1968) = 25567 days * 86400 s/day = 2,208,988,800 seconds
-NTP_EPOCH_OFFSET = 2208988800
-
-
 def get_current_timestamp(uom: int = 151) -> int:
-    """Return the current timestamp formatted for the target UOM.
-
-    - UOM 151: Unix timestamp (seconds since Jan 1, 1970 00:00:00 UTC).
-    - UOM 137: Seconds since Jan 1, 1900 00:00:00 UTC (NTP / ISY epoch, offset +2208988800).
-    """
-    now = int(time.time())
-    if int(uom) == 137:
-        return now + NTP_EPOCH_OFFSET
-    return now
+    """Return the current Unix timestamp (seconds since Jan 1, 1970 UTC)."""
+    return int(time.time())
 
 
 def is_uom151_supported(poly) -> bool:

@@ -47,6 +47,6 @@
 
   <!-- Timestamp (Epoch seconds) -->
   <editor id="TIMESTAMP">
-    <range uom="137" min="0" max="4294967295" prec="0" />
+    <range uom="137" min="0" max="2147483647" prec="0" />
   </editor>
 </editors>

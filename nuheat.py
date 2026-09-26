@@ -128,7 +128,7 @@ def _build_profile_definition(temp_unit: str = "F", time_uom: int = 151) -> dict
         {
             "id": "TIMESTAMP",
             "ranges": [
-                {"uom": str(time_uom), "min": 0, "max": 4294967295, "prec": 0}
+                {"uom": str(time_uom), "min": 0, "max": 2147483647, "prec": 0}
             ],
         },
     ]

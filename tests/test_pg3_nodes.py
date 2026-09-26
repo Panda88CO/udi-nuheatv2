@@ -6,7 +6,7 @@ from datetime import datetime, timezone, timedelta
 from unittest.mock import MagicMock, patch
 from nuheat import NuHeat
 from nodes import ThermostatNode, ThermostatNode_F, ThermostatNode_C, EnergyLogDayNode, EnergyLogWeekNode, EnergyLogYearNode
-from nodes.base import get_current_timestamp, is_uom151_supported, NTP_EPOCH_OFFSET
+from nodes.base import get_current_timestamp, is_uom151_supported
 
 controller_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'nuheat.py'))
 spec = importlib.util.spec_from_file_location("controller_module", controller_path)
@@ -751,8 +751,7 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertAlmostEqual(ts_151, now, delta=2)
 
         ts_137 = get_current_timestamp(137)
-        self.assertAlmostEqual(ts_137, now + NTP_EPOCH_OFFSET, delta=2)
-        self.assertEqual(ts_137 - ts_151, NTP_EPOCH_OFFSET)
+        self.assertAlmostEqual(ts_137, now, delta=2)
 
     def test_build_profile_definition(self):
         # Fahrenheit profile with UOM 151
@@ -804,7 +803,7 @@ class TestPG3Nodes(unittest.TestCase):
 
         now = int(time.time())
         c_time = controller.get_current_time()
-        self.assertAlmostEqual(c_time, now + NTP_EPOCH_OFFSET, delta=2)
+        self.assertAlmostEqual(c_time, now, delta=2)
 
         # Thermostat created under this controller
         node = ThermostatNode(mock_poly, 'controller', '99887766', 'Bath', controller=controller)
