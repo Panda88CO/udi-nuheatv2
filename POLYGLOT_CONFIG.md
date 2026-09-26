@@ -13,6 +13,8 @@ In your PG3/PG3x NodeServer dashboard, configure the following keys under **Conf
 | :--- | :--- | :--- | :--- |
 | `tz` | string | Your local tz database timezone name (Required for accurate energy log timestamps) | `America/New_York` |
 | `temp_unit` | string | Temperature unit: `F` for Fahrenheit (UOM 17) or `C` for Celsius (UOM 4) | `F` |
+| `force_uom137` | boolean | *(Optional / Testing)* Set to `true` to force timestamp UOM 137 (ISY-994 NTP epoch) even on IoX 5.8+ | `false` |
+| `time_uom` | integer | *(Optional / Testing)* Explicitly set timestamp UOM (`137` or `151`) | Auto |
 
 *A complete list of timezone names can be found in the [tz database time zones list](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) (e.g., `America/New_York`, `America/Chicago`, `America/Denver`, `America/Los_Angeles`).*
 

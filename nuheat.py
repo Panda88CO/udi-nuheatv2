@@ -279,7 +279,7 @@ class Controller(BaseNode):
         self.temperature_scale = None
         self.temp_unit = "F"
         self.temp_uom = 17
-        self.time_uom = 151 if is_uom151_supported(self.poly) else 137
+        self.time_uom = self._determine_time_uom()
         for drv in self.drivers:
             if isinstance(drv, dict) and drv.get('driver') == 'TIME':
                 drv['uom'] = self.time_uom
@@ -392,6 +392,46 @@ class Controller(BaseNode):
         """Return the current timestamp formatted for the target time_uom."""
         return get_current_timestamp(self.time_uom)
 
+    def _determine_time_uom(self) -> int:
+        """Determine time UOM (151 or 137). Checks customParams for testing override, otherwise checks FW support."""
+        raw_val = None
+        for key in ('time_uom', 'TIME_UOM', 'timeUom'):
+            if hasattr(self, 'customParams') and key in self.customParams and self.customParams[key]:
+                raw_val = str(self.customParams[key]).strip()
+                break
+
+        if not raw_val and hasattr(self, 'customParams'):
+            rawdata = getattr(self.customParams, '_rawdata', None)
+            if isinstance(rawdata, dict):
+                for k, v in rawdata.items():
+                    if k.lower() in ('time_uom', 'timeuom') and v:
+                        raw_val = str(v).strip()
+                        break
+
+        if raw_val in ('137', '151'):
+            LOGGER.info(f"Custom configuration time_uom override: {raw_val}")
+            return int(raw_val)
+
+        force_137 = None
+        for key in ('force_uom137', 'force_uom_137', 'FORCE_UOM137', 'force137'):
+            if hasattr(self, 'customParams') and key in self.customParams and self.customParams[key]:
+                force_137 = str(self.customParams[key]).strip().lower()
+                break
+
+        if not force_137 and hasattr(self, 'customParams'):
+            rawdata = getattr(self.customParams, '_rawdata', None)
+            if isinstance(rawdata, dict):
+                for k, v in rawdata.items():
+                    if k.lower() in ('force_uom137', 'force_uom_137', 'force137') and v:
+                        force_137 = str(v).strip().lower()
+                        break
+
+        if force_137 in ('true', '1', 'yes', 'on'):
+            LOGGER.info("Custom configuration force_uom137 enabled: forcing UOM 137")
+            return 137
+
+        return 151 if is_uom151_supported(self.poly) else 137
+
     def _profiles_match(self, current_profile, expected_profile) -> bool:
         if not isinstance(current_profile, dict) or not isinstance(expected_profile, dict):
             return False
@@ -402,7 +442,7 @@ class Controller(BaseNode):
 
     def _publish_profile(self, wait_response: bool = False) -> None:
         """Publish dynamic JSON profile if supported (Approach A), or fall back to static profile files."""
-        self.time_uom = 151 if is_uom151_supported(self.poly) else 137
+        self.time_uom = self._determine_time_uom()
         for drv in self.drivers:
             if isinstance(drv, dict) and drv.get('driver') == 'TIME':
                 drv['uom'] = self.time_uom
@@ -679,10 +719,31 @@ class Controller(BaseNode):
                         if hasattr(node, 'update_energy'):
                             node.update_energy()
 
+        prev_time_uom = self.time_uom
+        self.time_uom = self._determine_time_uom()
+        if self.time_uom != prev_time_uom:
+            LOGGER.info(f"Time UOM changed from {prev_time_uom} to {self.time_uom}")
+            for drv in self.drivers:
+                if isinstance(drv, dict) and drv.get('driver') == 'TIME':
+                    drv['uom'] = self.time_uom
+            self.setDriver('TIME', self.get_current_time(), uom=self.time_uom)
+            self.update_profile()
+            get_nodes = getattr(self.poly, 'getNodes', None)
+            nodes = get_nodes() if callable(get_nodes) else getattr(self, 'nodes', {})
+            nodes_iterable = nodes.values() if isinstance(nodes, dict) else nodes
+            for node in nodes_iterable:
+                if hasattr(node, 'time_uom'):
+                    node.time_uom = self.time_uom
+                    for drv in getattr(node, 'drivers', []):
+                        if isinstance(drv, dict) and drv.get('driver') == 'TIME':
+                            drv['uom'] = self.time_uom
+                    if hasattr(node, 'setDriver'):
+                        node.setDriver('TIME', get_current_timestamp(self.time_uom), uom=self.time_uom)
+
         self.update_oauth_config()
         self.handleCustomParamsDone = True
         self.customParam_done = True
-        LOGGER.debug(f"customParamsHandler finished: tz={self.tz}, temp_unit={self.temp_unit} (uom {self.temp_uom})")
+        LOGGER.debug(f"customParamsHandler finished: tz={self.tz}, temp_unit={self.temp_unit} (uom {self.temp_uom}), time_uom={self.time_uom}")
 
     def start(self):
         LOGGER.info('Starting NuHeat NodeServer...')
@@ -698,7 +759,7 @@ class Controller(BaseNode):
             time.sleep(1)
             wait_seconds += 1
 
-        self.time_uom = 151 if is_uom151_supported(self.poly) else 137
+        self.time_uom = self._determine_time_uom()
         for drv in self.drivers:
             if isinstance(drv, dict) and drv.get('driver') == 'TIME':
                 drv['uom'] = self.time_uom
@@ -845,7 +906,7 @@ class Controller(BaseNode):
                 self.poly.delNode(stat_address)
                 self._wait_for_node_deleted(stat_address, timeout=5.0)
 
-            stat_node = target_node_cls(self.poly, stat_address, stat_address, name, self, temp_uom=self.temp_uom)
+            stat_node = target_node_cls(self.poly, stat_address, stat_address, name, self, temp_uom=self.temp_uom, time_uom=self.time_uom)
             LOGGER.info(f"Adding thermostat node {stat_address} ({name}) as {stat_node.id}...")
             add_node(stat_node)
 
