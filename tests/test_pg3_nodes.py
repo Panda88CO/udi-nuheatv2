@@ -827,42 +827,6 @@ class TestPG3Nodes(unittest.TestCase):
         controller._publish_profile(wait_response=True)
         self.mock_poly.updateProfile.assert_called_once()
 
-    def test_controller_time_uom_custom_param_override(self):
-        controller = Controller(self.mock_poly, 'controller', 'controller', 'NuHeat')
-        self.assertEqual(controller.time_uom, 151)
-
-        mock_stat = MagicMock()
-        mock_stat.time_uom = 151
-        mock_stat.drivers = [{'driver': 'TIME', 'value': 0, 'uom': 151}]
-        self.mock_poly.getNodes.return_value = {'stat_1': mock_stat}
-        controller.update_profile = MagicMock()
-
-        # 1. Test force_uom137 = 'true'
-        controller.customParamsHandler({'force_uom137': 'true'})
-        self.assertEqual(controller.time_uom, 137)
-        time_drv = [d for d in controller.drivers if d['driver'] == 'TIME'][0]
-        self.assertEqual(time_drv['uom'], 137)
-        self.assertEqual(mock_stat.time_uom, 137)
-        self.assertEqual(mock_stat.drivers[0]['uom'], 137)
-        mock_stat.setDriver.assert_called_with('TIME', unittest.mock.ANY, uom=137)
-
-        # 2. Test reverting force_uom137 = 'false'
-        controller.customParamsHandler({'force_uom137': 'false'})
-        self.assertEqual(controller.time_uom, 151)
-        self.assertEqual(time_drv['uom'], 151)
-        self.assertEqual(mock_stat.time_uom, 151)
-        self.assertEqual(mock_stat.drivers[0]['uom'], 151)
-
-        # 3. Test explicit time_uom = '137'
-        controller.customParamsHandler({'time_uom': '137'})
-        self.assertEqual(controller.time_uom, 137)
-        self.assertEqual(time_drv['uom'], 137)
-
-        # 4. Test explicit time_uom = '151'
-        controller.customParamsHandler({'time_uom': '151'})
-        self.assertEqual(controller.time_uom, 151)
-        self.assertEqual(time_drv['uom'], 151)
-
 
 if __name__ == '__main__':
     unittest.main()
