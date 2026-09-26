@@ -411,7 +411,7 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertTrue(os.path.isfile(version_path))
         with open(version_path, 'r') as f:
             v_content = f.read().strip()
-        self.assertEqual(v_content, "2.2.19")
+        self.assertEqual(v_content, "2.2.20")
 
         # Check editors.xml
         editors_path = os.path.join(repo_dir, 'profile', 'editor', 'editors.xml')
@@ -480,10 +480,10 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertEqual(online_stat[0].get('subset'), '0,1')
         self.assertEqual(online_stat[0].get('nls'), 'ONLINE')
 
-        # Verify TIMESTAMP editor defaults to uom="137" in static XML profile for ISY-994 compatibility
+        # Verify TIMESTAMP editor defaults to uom="58" in static XML profile for ISY-994 compatibility
         timestamp_stat = editor_ids['TIMESTAMP'].findall('range')
         self.assertEqual(len(timestamp_stat), 1)
-        self.assertEqual(timestamp_stat[0].get('uom'), '137')
+        self.assertEqual(timestamp_stat[0].get('uom'), '58')
         self.assertEqual(timestamp_stat[0].get('prec'), '0')
 
         # Check nodedefs.xml
@@ -756,7 +756,7 @@ class TestPG3Nodes(unittest.TestCase):
     def test_build_profile_definition(self):
         # Fahrenheit profile with UOM 151
         profile_f_151 = _build_profile_definition(temp_unit="F", time_uom=151)
-        self.assertEqual(profile_f_151['version'], "2.2.19")
+        self.assertEqual(profile_f_151['version'], "2.2.20")
         editors_f = {e['id']: e for e in profile_f_151['editors']}
         self.assertIn('TEMPF', editors_f)
         self.assertIn('TEMPFINPUT', editors_f)
@@ -764,13 +764,17 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertIn('ONLINE', editors_f)
         self.assertIn('TIMESTAMP', editors_f)
         self.assertEqual(editors_f['TIMESTAMP']['ranges'][0]['uom'], '151')
+        time_prop_f = [p for nd in profile_f_151['nodedefs'] for p in nd['properties'] if p['id'] == 'TIME'][0]
+        self.assertEqual(time_prop_f['name'], 'Last Update')
 
-        # Celsius profile with UOM 137
-        profile_c_137 = _build_profile_definition(temp_unit="C", time_uom=137)
-        editors_c = {e['id']: e for e in profile_c_137['editors']}
+        # Celsius profile with fallback UOM 58
+        profile_c_58 = _build_profile_definition(temp_unit="C", time_uom=58)
+        editors_c = {e['id']: e for e in profile_c_58['editors']}
         self.assertIn('TEMPC', editors_c)
         self.assertIn('TEMPCINPUT', editors_c)
-        self.assertEqual(editors_c['TIMESTAMP']['ranges'][0]['uom'], '137')
+        self.assertEqual(editors_c['TIMESTAMP']['ranges'][0]['uom'], '58')
+        time_prop_c = [p for nd in profile_c_58['nodedefs'] for p in nd['properties'] if p['id'] == 'TIME'][0]
+        self.assertEqual(time_prop_c['name'], 'Time since 1980')
 
         # Verify nodedefs have UPPERCASE IDs and no underscores
         for nd in profile_f_151['nodedefs']:
@@ -788,7 +792,7 @@ class TestPG3Nodes(unittest.TestCase):
                     self.assertEqual(param['editor'], param['editor'].upper())
                     self.assertNotIn('_', param['editor'])
 
-    def test_controller_isy994_uom137_fallback(self):
+    def test_controller_isy994_uom58_fallback(self):
         mock_poly = MagicMock()
         mock_poly.subscribe = MagicMock()
         mock_poly.Notices = {}
@@ -797,9 +801,9 @@ class TestPG3Nodes(unittest.TestCase):
         mock_poly.pg3init = {'isyVersion': '5.3.4'}
 
         controller = Controller(mock_poly, 'controller', 'controller', 'NuHeat')
-        self.assertEqual(controller.time_uom, 137)
+        self.assertEqual(controller.time_uom, 58)
         time_drv = [d for d in controller.drivers if d['driver'] == 'TIME'][0]
-        self.assertEqual(time_drv['uom'], 137)
+        self.assertEqual(time_drv['uom'], 58)
 
         now = int(time.time())
         c_time = controller.get_current_time()
@@ -807,9 +811,32 @@ class TestPG3Nodes(unittest.TestCase):
 
         # Thermostat created under this controller
         node = ThermostatNode(mock_poly, 'controller', '99887766', 'Bath', controller=controller)
-        self.assertEqual(node.time_uom, 137)
+        self.assertEqual(node.time_uom, 58)
         stat_time_drv = [d for d in node.drivers if d['driver'] == 'TIME'][0]
-        self.assertEqual(stat_time_drv['uom'], 137)
+        self.assertEqual(stat_time_drv['uom'], 58)
+
+    def test_controller_force_old_fw_override(self):
+        mock_poly = MagicMock()
+        mock_poly.subscribe = MagicMock()
+        mock_poly.Notices = {}
+        mock_poly.getNodes.return_value = {}
+        mock_poly.getNode.return_value = None
+        mock_poly.pg3init = {'isyVersion': '5.8.4'}
+
+        controller = Controller(mock_poly, 'controller', 'controller', 'NuHeat')
+        self.assertEqual(controller.time_uom, 151)
+
+        # Enable forceOldFW
+        controller.customParamsHandler({'forceOldFW': 'true'})
+        self.assertEqual(controller.time_uom, 58)
+        time_drv = [d for d in controller.drivers if d['driver'] == 'TIME'][0]
+        self.assertEqual(time_drv['uom'], 58)
+
+        # Disable forceOldFW
+        controller.customParamsHandler({'forceOldFW': 'false'})
+        self.assertEqual(controller.time_uom, 151)
+        time_drv = [d for d in controller.drivers if d['driver'] == 'TIME'][0]
+        self.assertEqual(time_drv['uom'], 151)
 
     def test_controller_publish_profile(self):
         controller = Controller(self.mock_poly, 'controller', 'controller', 'NuHeat')

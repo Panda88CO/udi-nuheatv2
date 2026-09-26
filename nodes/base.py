@@ -8,6 +8,14 @@ def get_current_timestamp(uom: int = 151) -> int:
 
 def is_uom151_supported(poly) -> bool:
     """Check if ISY/IoX firmware supports UOM 151 (IoX 5.8.0+)."""
+    if poly is not None:
+        custom_params = getattr(poly, 'customParams', None) or getattr(poly, 'customparams', None)
+        if custom_params:
+            for k in ('forceOldFW', 'forceoldfw', 'FORCEOLDFW', 'force_old_fw', 'FORCE_OLD_FW'):
+                val = custom_params.get(k) if hasattr(custom_params, 'get') else getattr(custom_params, k, None)
+                if val and str(val).strip().lower() in ('true', '1', 'yes', 'on'):
+                    return False
+
     isy_ver = None
     if poly is not None:
         if hasattr(poly, 'pg3init') and isinstance(poly.pg3init, dict):

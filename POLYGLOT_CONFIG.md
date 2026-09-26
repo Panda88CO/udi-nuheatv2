@@ -13,8 +13,7 @@ In your PG3/PG3x NodeServer dashboard, configure the following keys under **Conf
 | :--- | :--- | :--- | :--- |
 | `tz` | string | Your local tz database timezone name (Required for accurate energy log timestamps) | `America/New_York` |
 | `temp_unit` | string | Temperature unit: `F` for Fahrenheit (UOM 17) or `C` for Celsius (UOM 4) | `F` |
-| `force_uom137` | boolean | *(Optional / Testing)* Set to `true` to force timestamp UOM 137 (ISY-994 NTP epoch) even on IoX 5.8+ | `false` |
-| `time_uom` | integer | *(Optional / Testing)* Explicitly set timestamp UOM (`137` or `151`) | Auto |
+| `time_uom` | integer | *(Optional / Testing)* Explicitly set timestamp UOM (`58` or `151`) | Auto |
 
 *A complete list of timezone names can be found in the [tz database time zones list](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) (e.g., `America/New_York`, `America/Chicago`, `America/Denver`, `America/Los_Angeles`).*
 
@@ -51,7 +50,7 @@ For each thermostat discovered on your account, nodes are created serially 1-by-
 1. **Controller Node** (`controller`):
    - **Status Drivers**:
      - NodeServer Online (`ST` — Online / Offline, UOM 2)
-     - Last Update (`TIME` — timestamp, UOM 151 on IoX 5.8+ / UOM 137 on ISY-994)
+     - Last Update (`TIME` — timestamp, UOM 151 on IoX 5.8+ / UOM 58 on ISY-994 labeled as "Time since 1980")
    - **Heartbeat**: Toggles `DON` / `DOF` on each short poll.
    - **Commands**:
      - **Update (`UPDATE`)**: Immediately force updates all nodes and energy logs.
@@ -64,7 +63,7 @@ For each thermostat discovered on your account, nodes are created serially 1-by-
      - Heat State (`CLIHCS` — Idle, Heating)
      - Hold Time (`GV4` — duration in minutes [UOM 45]; displays remaining minutes on Temporary Hold; 0 in Auto and Permanent Hold)
      - Online Status (`GV5` — Online / Offline, UOM 2)
-     - Last Update (`TIME` — timestamp, UOM 151 on IoX 5.8+ / UOM 137 on ISY-994)
+     - Last Update (`TIME` — timestamp, UOM 151 on IoX 5.8+ / UOM 58 on ISY-994 labeled as "Time since 1980")
      - Daily Energy (`GV0` — kWh, UOM 33)
      - Last 7 Days Energy (`GV1` — kWh, UOM 33)
      - Monthly Energy (`GV2` — kWh, UOM 33)

@@ -230,7 +230,7 @@
           <li><strong>Drivers</strong>:
             <ul>
               <li><strong>NodeServer Online (<code>ST</code>)</strong>: Indicates whether the NodeServer process is running and connected (Online / Offline, UOM 2).</li>
-              <li><strong>Last Update (<code>TIME</code>)</strong>: Timestamp (UOM 151 on IoX 5.8+ / UOM 137 on ISY-994) of the last successful communication/poll with the controller.</li>
+              <li><strong>Last Update (<code>TIME</code>)</strong>: Timestamp (UOM 151 on IoX 5.8+ / UOM 58 on ISY-994 labeled as "Time since 1980") of the last successful communication/poll with the controller.</li>
             </ul>
           </li>
           <li><strong>Heartbeat (<code>DON</code> / <code>DOF</code>)</strong>: Emits alternating <code>DON</code> and <code>DOF</code> control events on each short poll for ISY watchdog / heartbeat monitoring programs.</li>
@@ -248,7 +248,7 @@
           <li><strong>Heat State (<code>CLIHCS</code>)</strong>: Idle or Heating.</li>
           <li><strong>Hold Time (<code>GV4</code>)</strong>: Duration in minutes (UOM 45); displays remaining minutes on Temporary Hold; 0 in Auto and Permanent Hold.</li>
           <li><strong>Online Status (<code>GV5</code>)</strong>: Thermostat connection status (Online / Offline, UOM 2).</li>
-          <li><strong>Last Update (<code>TIME</code>)</strong>: Timestamp (UOM 151 on IoX 5.8+ / UOM 137 on ISY-994) of the last data refresh for this thermostat.</li>
+          <li><strong>Last Update (<code>TIME</code>)</strong>: Timestamp (UOM 151 on IoX 5.8+ / UOM 58 on ISY-994 labeled as "Time since 1980") of the last data refresh for this thermostat.</li>
           <li><strong>Commands</strong>:
             <ul>
               <li><strong>Set Auto (<code>SETAUTO</code>)</strong>: Sets thermostat to follow internal schedule.</li>

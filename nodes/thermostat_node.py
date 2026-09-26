@@ -99,18 +99,18 @@ class ThermostatNode(BaseNode):
             try:
                 self.time_uom = int(time_uom)
             except (ValueError, TypeError):
-                self.time_uom = 151 if is_uom151_supported(polyglot) else 137
+                self.time_uom = 151 if is_uom151_supported(polyglot) else 58
         elif controller and hasattr(controller, 'time_uom'):
             val = getattr(controller, 'time_uom', None)
             if isinstance(val, (int, str)):
                 try:
                     self.time_uom = int(val)
                 except (ValueError, TypeError):
-                    self.time_uom = 151 if is_uom151_supported(polyglot) else 137
+                    self.time_uom = 151 if is_uom151_supported(polyglot) else 58
             else:
-                self.time_uom = 151 if is_uom151_supported(polyglot) else 137
+                self.time_uom = 151 if is_uom151_supported(polyglot) else 58
         else:
-            self.time_uom = 151 if is_uom151_supported(polyglot) else 137
+            self.time_uom = 151 if is_uom151_supported(polyglot) else 58
 
         if self.temp_uom == 4 and getattr(self, 'id', None) in ('thermostatf', 'thermostat_f', 'THERMOSTAT_F', 'thermostatF'):
             self.id = 'thermostatc'

@@ -6,7 +6,7 @@ import threading
 
 from nodes.base import LOGGER, BaseNode, get_current_timestamp, is_uom151_supported
 
-VERSION = "2.2.19"
+VERSION = "2.2.20"
 
 try:
     import udi_interface
@@ -60,8 +60,10 @@ def _build_profile_definition(temp_unit: str = "F", time_uom: int = 151) -> dict
     """Build the dynamic JSON profile definition for PG3/PG3x.
 
     Dynamic profile includes all editors and nodedefs mirroring editors.xml and nodedefs.xml,
-    with TIMESTAMP editor dynamically assigned time_uom (151 for modern IoX, 137 for ISY-994).
+    with TIMESTAMP editor dynamically assigned time_uom (151 for modern IoX, 58 for ISY-994).
+    When time_uom is not 151, TIME property is labeled as 'Time since 1980'.
     """
+    time_label = "Last Update" if int(time_uom) == 151 else "Time since 1980"
     editors = [
         {
             "id": "ONLINE",
@@ -140,7 +142,7 @@ def _build_profile_definition(temp_unit: str = "F", time_uom: int = 151) -> dict
             "icon": "Thermostat",
             "properties": [
                 {"id": "ST", "name": "NodeServer Online", "editor": "ONLINE"},
-                {"id": "TIME", "name": "Last Update", "editor": "TIMESTAMP"},
+                {"id": "TIME", "name": time_label, "editor": "TIMESTAMP"},
             ],
             "cmds": {
                 "accepts": [
@@ -168,7 +170,7 @@ def _build_profile_definition(temp_unit: str = "F", time_uom: int = 151) -> dict
                 {"id": "GV3", "name": "Yearly Energy", "editor": "TPW"},
                 {"id": "GV4", "name": "Hold Time", "editor": "HOLDMINS"},
                 {"id": "GV5", "name": "Online", "editor": "ONLINE"},
-                {"id": "TIME", "name": "Last Update", "editor": "TIMESTAMP"},
+                {"id": "TIME", "name": time_label, "editor": "TIMESTAMP"},
             ],
             "cmds": {
                 "accepts": [
@@ -209,7 +211,7 @@ def _build_profile_definition(temp_unit: str = "F", time_uom: int = 151) -> dict
                 {"id": "GV3", "name": "Yearly Energy", "editor": "TPW"},
                 {"id": "GV4", "name": "Hold Time", "editor": "HOLDMINS"},
                 {"id": "GV5", "name": "Online", "editor": "ONLINE"},
-                {"id": "TIME", "name": "Last Update", "editor": "TIMESTAMP"},
+                {"id": "TIME", "name": time_label, "editor": "TIMESTAMP"},
             ],
             "cmds": {
                 "accepts": [
@@ -392,8 +394,29 @@ class Controller(BaseNode):
         """Return the current timestamp formatted for the target time_uom."""
         return get_current_timestamp(self.time_uom)
 
+    def _is_force_old_fw(self) -> bool:
+        """Check if forceOldFW is enabled in customParams."""
+        for key in ('forceOldFW', 'forceoldfw', 'FORCEOLDFW', 'force_old_fw', 'FORCE_OLD_FW',
+                    'force_uom58', 'force_uom_58', 'FORCE_UOM58', 'force58',
+                    'force_uom137', 'force_uom_137', 'FORCE_UOM137', 'force137'):
+            if hasattr(self, 'customParams') and key in self.customParams and self.customParams[key]:
+                val = str(self.customParams[key]).strip().lower()
+                if val in ('true', '1', 'yes', 'on'):
+                    return True
+
+        if hasattr(self, 'customParams'):
+            rawdata = getattr(self.customParams, '_rawdata', None)
+            if isinstance(rawdata, dict):
+                for k, v in rawdata.items():
+                    kl = k.lower()
+                    if kl in ('forceoldfw', 'force_old_fw', 'force_uom58', 'force_uom_58', 'force58',
+                              'force_uom137', 'force_uom_137', 'force137') and v:
+                        if str(v).strip().lower() in ('true', '1', 'yes', 'on'):
+                            return True
+        return False
+
     def _determine_time_uom(self) -> int:
-        """Determine time UOM (151 or 137). Checks customParams for testing override, otherwise checks FW support."""
+        """Determine time UOM (151 or 58). Checks customParams for testing override, otherwise checks FW support."""
         raw_val = None
         for key in ('time_uom', 'TIME_UOM', 'timeUom'):
             if hasattr(self, 'customParams') and key in self.customParams and self.customParams[key]:
@@ -408,29 +431,15 @@ class Controller(BaseNode):
                         raw_val = str(v).strip()
                         break
 
-        if raw_val in ('137', '151'):
+        if raw_val in ('58', '137', '151'):
             LOGGER.info(f"Custom configuration time_uom override: {raw_val}")
             return int(raw_val)
 
-        force_137 = None
-        for key in ('force_uom137', 'force_uom_137', 'FORCE_UOM137', 'force137'):
-            if hasattr(self, 'customParams') and key in self.customParams and self.customParams[key]:
-                force_137 = str(self.customParams[key]).strip().lower()
-                break
+        if self._is_force_old_fw():
+            LOGGER.info("Custom configuration forceOldFW enabled: forcing UOM 58 (legacy ISY-994 behavior)")
+            return 58
 
-        if not force_137 and hasattr(self, 'customParams'):
-            rawdata = getattr(self.customParams, '_rawdata', None)
-            if isinstance(rawdata, dict):
-                for k, v in rawdata.items():
-                    if k.lower() in ('force_uom137', 'force_uom_137', 'force137') and v:
-                        force_137 = str(v).strip().lower()
-                        break
-
-        if force_137 in ('true', '1', 'yes', 'on'):
-            LOGGER.info("Custom configuration force_uom137 enabled: forcing UOM 137")
-            return 137
-
-        return 151 if is_uom151_supported(self.poly) else 137
+        return 151 if is_uom151_supported(self.poly) else 58
 
     def _profiles_match(self, current_profile, expected_profile) -> bool:
         if not isinstance(current_profile, dict) or not isinstance(expected_profile, dict):

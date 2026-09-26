@@ -2,7 +2,7 @@
 ND-controller-NAME = NuHeat Signature Controller
 ND-controller-ICON = Thermostat
 ST-ctl-ST-NAME = NodeServer Online
-ST-ctl-TIME-NAME = Last Update
+ST-ctl-TIME-NAME = Time since 1980
 CMD-ctl-UPDATE-NAME = Update
 CMD-ctl-DON-NAME = On
 CMD-ctl-DOF-NAME = Off
@@ -23,7 +23,7 @@ ST-TSTAT-GV2-NAME = Monthly Energy
 ST-TSTAT-GV3-NAME = Yearly Energy
 ST-TSTAT-GV4-NAME = Hold Time
 ST-TSTAT-GV5-NAME = Online
-ST-TSTAT-TIME-NAME = Last Update
+ST-TSTAT-TIME-NAME = Time since 1980
 
 CMD-TSTAT-UPDATE-NAME = Force Update
 CMD-TSTAT-SETAUTO-NAME = Set Auto
