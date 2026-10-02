@@ -630,13 +630,15 @@ class TestPG3Nodes(unittest.TestCase):
 
     def test_controller_update_nodes(self):
         controller = Controller(self.mock_poly, 'controller', 'controller', 'NuHeat')
-        controller.longPoll = MagicMock()
+        controller.longPoll = MagicMock(return_value=True)
         controller.setDriver = MagicMock()
 
         res = controller.update_nodes()
         self.assertTrue(res)
         controller.longPoll.assert_called_once()
-        controller.setDriver.assert_called_with('TIME', unittest.mock.ANY, uom=151)
+        # Verify update_nodes does NOT blindly set TIME itself; longPoll handles it on valid data
+        time_calls = [c for c in controller.setDriver.call_args_list if c[0][0] == 'TIME']
+        self.assertEqual(len(time_calls), 0)
 
     def test_controller_heartbeat(self):
         controller = Controller(self.mock_poly, 'controller', 'controller', 'NuHeat')
@@ -852,6 +854,127 @@ class TestPG3Nodes(unittest.TestCase):
         controller._last_profile_hash = None
         controller._publish_profile(wait_response=True)
         self.mock_poly.updateProfile.assert_called_once()
+
+    def test_time_not_updated_on_error_thermostat_node(self):
+        controller = MagicMock()
+        controller.NuHeat = MagicMock()
+        controller.NuHeat.nuheat_fahrenheit_to_celsius_json = lambda f: int(f * 100)
+        controller.NuHeat.nuheat_celsius_to_fahrenheit = lambda c: round((c / 100.0) * 1.8 + 32, 1)
+
+        node = ThermostatNode(self.mock_poly, 'controller', '99887766', 'Bath', controller=controller, temp_uom=17, time_uom=151)
+        node.setDriver = MagicMock()
+
+        # 1. get_thermostat returns None (API error or unavailable)
+        controller.NuHeat.get_thermostat.return_value = None
+        res = node.update_info()
+        self.assertFalse(res)
+        node.setDriver.assert_called_with('GV5', 0, uom=2)
+        time_calls = [c for c in node.setDriver.call_args_list if c[0][0] == 'TIME']
+        self.assertEqual(len(time_calls), 0)
+
+        # 2. get_thermostat raises an exception
+        node.setDriver.reset_mock()
+        controller.NuHeat.get_thermostat.side_effect = Exception("Connection timeout")
+        res = node.update_info()
+        self.assertFalse(res)
+        node.setDriver.assert_called_with('GV5', 0, uom=2)
+        time_calls = [c for c in node.setDriver.call_args_list if c[0][0] == 'TIME']
+        self.assertEqual(len(time_calls), 0)
+
+        # 3. get_thermostat returns valid data
+        node.setDriver.reset_mock()
+        controller.NuHeat.get_thermostat.side_effect = None
+        controller.NuHeat.get_thermostat.return_value = {
+            'serialNumber': '99887766',
+            'currentTemperature': 2100,
+            'setPointTemperature': 2200,
+            'isHeating': False,
+            'mode': 1,
+            'online': True
+        }
+        res = node.update_info()
+        self.assertTrue(res)
+        time_calls = [c for c in node.setDriver.call_args_list if c[0][0] == 'TIME']
+        self.assertEqual(len(time_calls), 1)
+        self.assertEqual(time_calls[0][1].get('uom'), 151)
+
+    def test_time_not_updated_on_error_energy(self):
+        controller = MagicMock()
+        controller.NuHeat = MagicMock()
+        controller.tz = 'America/New_York'
+
+        node = ThermostatNode(self.mock_poly, 'controller', '99887766', 'Bath', controller=controller, time_uom=151)
+        node.setDriver = MagicMock()
+
+        # 1. All energy calls return None
+        controller.NuHeat.get_energy_log_day.return_value = None
+        controller.NuHeat.get_energy_log_week.return_value = None
+        controller.NuHeat.get_energy_log_month.return_value = None
+        controller.NuHeat.get_energy_log_year.return_value = None
+
+        res = node.update_energy()
+        self.assertFalse(res)
+        time_calls = [c for c in node.setDriver.call_args_list if c[0][0] == 'TIME']
+        self.assertEqual(len(time_calls), 0)
+        # Ensure drivers were not overwritten with 0.0
+        self.assertEqual(len(node.setDriver.call_args_list), 0)
+
+        # 2. Energy call raises exception
+        node.setDriver.reset_mock()
+        controller.NuHeat.get_energy_log_day.side_effect = Exception("API rate limited")
+        res = node.update_energy()
+        self.assertFalse(res)
+        time_calls = [c for c in node.setDriver.call_args_list if c[0][0] == 'TIME']
+        self.assertEqual(len(time_calls), 0)
+
+        # 3. At least one energy call returns valid data
+        node.setDriver.reset_mock()
+        controller.NuHeat.get_energy_log_day.side_effect = None
+        controller.NuHeat.get_energy_log_day.return_value = [60, 2.5, 0.35]
+        res = node.update_energy()
+        self.assertTrue(res)
+        node.setDriver.assert_any_call('GV0', 2.5, uom=33)
+        time_calls = [c for c in node.setDriver.call_args_list if c[0][0] == 'TIME']
+        self.assertEqual(len(time_calls), 1)
+
+    def test_controller_poll_time_updates_only_on_valid_data(self):
+        mock_poly = MagicMock()
+        mock_poly.pg3init = {'isyVersion': '5.8.4'}
+        controller = Controller(mock_poly, 'controller', 'controller', 'NuHeat')
+        controller.disco = 1
+        controller.setDriver = MagicMock()
+
+        mock_stat_node = MagicMock()
+        mock_stat_node.address = '99887766'
+        mock_poly.getNodes.return_value = {'99887766': mock_stat_node}
+
+        # 1. shortPoll when node update_info fails (returns False)
+        mock_stat_node.update_info.return_value = False
+        controller.shortPoll()
+        time_calls = [c for c in controller.setDriver.call_args_list if c[0][0] == 'TIME']
+        self.assertEqual(len(time_calls), 0)
+
+        # 2. shortPoll when node update_info succeeds (returns True)
+        controller.setDriver.reset_mock()
+        mock_stat_node.update_info.return_value = True
+        controller.shortPoll()
+        time_calls = [c for c in controller.setDriver.call_args_list if c[0][0] == 'TIME']
+        self.assertEqual(len(time_calls), 1)
+
+        # 3. longPoll when both update_info and update_energy fail (return False)
+        controller.setDriver.reset_mock()
+        mock_stat_node.update_info.return_value = False
+        mock_stat_node.update_energy.return_value = False
+        controller.longPoll()
+        time_calls = [c for c in controller.setDriver.call_args_list if c[0][0] == 'TIME']
+        self.assertEqual(len(time_calls), 0)
+
+        # 4. longPoll when update_energy succeeds (returns True)
+        controller.setDriver.reset_mock()
+        mock_stat_node.update_energy.return_value = True
+        controller.longPoll()
+        time_calls = [c for c in controller.setDriver.call_args_list if c[0][0] == 'TIME']
+        self.assertEqual(len(time_calls), 1)
 
 
 if __name__ == '__main__':

@@ -140,9 +140,15 @@ class ThermostatNode(BaseNode):
         nuheat_client = getattr(self.controller, 'NuHeat', None)
         if nuheat_client is None:
             LOGGER.error("NuHeat client not available on controller")
-            return
+            return False
 
-        stat = nuheat_client.get_thermostat(self.address)
+        try:
+            stat = nuheat_client.get_thermostat(self.address)
+        except Exception as e:
+            LOGGER.error(f"Error retrieving thermostat {self.address}: {e}")
+            self.setDriver('GV5', 0, uom=2)
+            return False
+
         if isinstance(stat, list):
             found = None
             for s in stat:
@@ -151,7 +157,7 @@ class ThermostatNode(BaseNode):
                     break
             stat = found
 
-        if stat is not None:
+        if stat is not None and isinstance(stat, dict) and ('currentTemperature' in stat or 'currentTemp' in stat):
             raw_cur = stat.get('currentTemperature', 0)
             raw_sp = stat.get('setPointTemperature', stat.get('setPointTemp', 0))
 
@@ -202,16 +208,17 @@ class ThermostatNode(BaseNode):
             self.setDriver('GV5', online_val, uom=2)
 
             self.setDriver('TIME', get_current_timestamp(self.time_uom), uom=self.time_uom)
+            return True
         else:
             LOGGER.error(f"Thermostat {self.address} not available or returned None")
             self.setDriver('GV5', 0, uom=2)
-            self.setDriver('TIME', get_current_timestamp(self.time_uom), uom=self.time_uom)
+            return False
 
     def update_energy(self, force: bool = False):
         nuheat_client = getattr(self.controller, 'NuHeat', None)
         if nuheat_client is None:
             LOGGER.error("NuHeat client not available on controller")
-            return
+            return False
 
         tz_name = getattr(self.controller, 'tz', 'America/New_York')
         try:
@@ -228,33 +235,72 @@ class ThermostatNode(BaseNode):
             f"Date={date_str}, Month={month_num}, Year={year_str} (tz={tz_name})"
         )
 
+        has_valid_energy = False
+        summary_parts = []
+
         # Daily Energy (GV0)
-        day_used = nuheat_client.get_energy_log_day(self.address, date_str)
-        day_val = day_used[1] if day_used is not None else 0.0
-        self.setDriver('GV0', day_val, uom=33)
+        try:
+            day_used = nuheat_client.get_energy_log_day(self.address, date_str)
+        except Exception as e:
+            LOGGER.error(f"Error retrieving daily energy for {self.address}: {e}")
+            day_used = None
+
+        if day_used is not None and isinstance(day_used, (list, tuple)) and len(day_used) > 1:
+            day_val = day_used[1]
+            self.setDriver('GV0', day_val, uom=33)
+            has_valid_energy = True
+            summary_parts.append(f"Daily (GV0): {day_val} kWh")
 
         # Last 7 Days Energy (GV1)
-        week_used = nuheat_client.get_energy_log_week(self.address, date_str)
-        week_val = week_used[1] if week_used is not None else 0.0
-        self.setDriver('GV1', week_val, uom=33)
+        try:
+            week_used = nuheat_client.get_energy_log_week(self.address, date_str)
+        except Exception as e:
+            LOGGER.error(f"Error retrieving weekly energy for {self.address}: {e}")
+            week_used = None
+
+        if week_used is not None and isinstance(week_used, (list, tuple)) and len(week_used) > 1:
+            week_val = week_used[1]
+            self.setDriver('GV1', week_val, uom=33)
+            has_valid_energy = True
+            summary_parts.append(f"7-Day (GV1): {week_val} kWh")
 
         # Monthly Energy (GV2)
-        month_used = nuheat_client.get_energy_log_month(self.address, year_str, month_num, force=force)
-        month_val = month_used[1] if month_used is not None else 0.0
-        self.setDriver('GV2', month_val, uom=33)
+        try:
+            month_used = nuheat_client.get_energy_log_month(self.address, year_str, month_num, force=force)
+        except Exception as e:
+            LOGGER.error(f"Error retrieving monthly energy for {self.address}: {e}")
+            month_used = None
+
+        if month_used is not None and isinstance(month_used, (list, tuple)) and len(month_used) > 1:
+            month_val = month_used[1]
+            self.setDriver('GV2', month_val, uom=33)
+            has_valid_energy = True
+            summary_parts.append(f"Monthly (GV2): {month_val} kWh")
 
         # Yearly Energy (GV3)
-        year_used = nuheat_client.get_energy_log_year(self.address, year_str, force=force)
-        year_val = year_used[1] if year_used is not None else 0.0
-        self.setDriver('GV3', year_val, uom=33)
+        try:
+            year_used = nuheat_client.get_energy_log_year(self.address, year_str, force=force)
+        except Exception as e:
+            LOGGER.error(f"Error retrieving yearly energy for {self.address}: {e}")
+            year_used = None
 
-        self.setDriver('TIME', get_current_timestamp(self.time_uom), uom=self.time_uom)
+        if year_used is not None and isinstance(year_used, (list, tuple)) and len(year_used) > 1:
+            year_val = year_used[1]
+            self.setDriver('GV3', year_val, uom=33)
+            has_valid_energy = True
+            summary_parts.append(f"Yearly (GV3): {year_val} kWh")
 
-        LOGGER.info(
-            f"Thermostat {self.address} ({self.name}) Energy Updated -> "
-            f"Daily (GV0): {day_val} kWh, 7-Day (GV1): {week_val} kWh, "
-            f"Monthly (GV2): {month_val} kWh, Yearly (GV3): {year_val} kWh"
-        )
+        if has_valid_energy:
+            self.setDriver('TIME', get_current_timestamp(self.time_uom), uom=self.time_uom)
+            LOGGER.info(
+                f"Thermostat {self.address} ({self.name}) Energy Updated -> " + ", ".join(summary_parts)
+            )
+            return True
+        else:
+            LOGGER.warning(
+                f"Thermostat {self.address} ({self.name}) No energy data received or all energy endpoints returned None"
+            )
+            return False
 
     def force_update(self, command=None):
         LOGGER.info(f"Updating thermostat {self.address} ({self.name})...")

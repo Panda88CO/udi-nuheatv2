@@ -773,7 +773,6 @@ class Controller(BaseNode):
             if isinstance(drv, dict) and drv.get('driver') == 'TIME':
                 drv['uom'] = self.time_uom
         self.setDriver('ST', 1, uom=2)
-        self.setDriver('TIME', self.get_current_time(), uom=self.time_uom)
         self.update_profile()
 
         if not self.is_oauth_configured():
@@ -798,7 +797,6 @@ class Controller(BaseNode):
                 self.Notices['auth'] = "Please click 'Authenticate' in the PG3 dashboard to link your NuHeat account."
 
     def poll(self, polltype):
-        self.setDriver('TIME', self.get_current_time(), uom=self.time_uom)
         if 'shortPoll' in polltype:
             self.shortPoll()
         elif 'longPoll' in polltype:
@@ -821,21 +819,43 @@ class Controller(BaseNode):
             get_nodes = getattr(self.poly, 'getNodes', None)
             nodes = get_nodes() if callable(get_nodes) else getattr(self, 'nodes', {})
             nodes_iterable = nodes.values() if isinstance(nodes, dict) else nodes
+            any_success = False
             for node in nodes_iterable:
                 if getattr(node, 'address', None) != self.address and hasattr(node, 'update_info'):
-                    node.update_info()
+                    try:
+                        if node.update_info():
+                            any_success = True
+                    except Exception as e:
+                        LOGGER.error(f"Error in shortPoll updating node {getattr(node, 'address', '')}: {e}")
+            if any_success:
+                self.setDriver('TIME', self.get_current_time(), uom=self.time_uom)
+            return any_success
+        return False
 
     def longPoll(self):
         if self.disco == 1:
             get_nodes = getattr(self.poly, 'getNodes', None)
             nodes = get_nodes() if callable(get_nodes) else getattr(self, 'nodes', {})
             nodes_iterable = nodes.values() if isinstance(nodes, dict) else nodes
+            any_success = False
             for node in nodes_iterable:
                 if getattr(node, 'address', None) != self.address:
                     if hasattr(node, 'update_info'):
-                        node.update_info()
+                        try:
+                            if node.update_info():
+                                any_success = True
+                        except Exception as e:
+                            LOGGER.error(f"Error in longPoll updating node info {getattr(node, 'address', '')}: {e}")
                     if hasattr(node, 'update_energy'):
-                        node.update_energy()
+                        try:
+                            if node.update_energy():
+                                any_success = True
+                        except Exception as e:
+                            LOGGER.error(f"Error in longPoll updating node energy {getattr(node, 'address', '')}: {e}")
+            if any_success:
+                self.setDriver('TIME', self.get_current_time(), uom=self.time_uom)
+            return any_success
+        return False
 
     def discover(self, *args, **kwargs):
         token = self.get_access_token()
@@ -858,6 +878,8 @@ class Controller(BaseNode):
 
         if isinstance(thermostats, dict):
             thermostats = [thermostats]
+
+        self.setDriver('TIME', self.get_current_time(), uom=self.time_uom)
 
         target_node_cls = ThermostatNode_C if self.temp_unit == 'C' else ThermostatNode_F
         target_node_id = target_node_cls.id
@@ -951,7 +973,6 @@ class Controller(BaseNode):
     def update_nodes(self, command=None):
         """Forces an immediate update across all nodes (executes longPoll)."""
         LOGGER.info('Forcing update across all nodes...')
-        self.setDriver('TIME', self.get_current_time(), uom=self.time_uom)
         self.longPoll()
         return True
 

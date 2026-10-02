@@ -29,7 +29,7 @@ class EnergyLogDayNode(BaseNode):
         nuheat_client = getattr(self.controller, 'NuHeat', None)
         if nuheat_client is None:
             LOGGER.error("NuHeat client not available on controller")
-            return
+            return False
 
         tz_name = getattr(self.controller, 'tz', 'America/New_York')
         try:
@@ -38,8 +38,13 @@ class EnergyLogDayNode(BaseNode):
             date_str = datetime.now(pytz.timezone('America/New_York')).strftime('%Y-%m-%d')
 
         stat_id = getattr(self, 'stat_address', self.primary)
-        energy_used = nuheat_client.get_energy_log_day(stat_id, date_str)
-        if energy_used is not None:
+        try:
+            energy_used = nuheat_client.get_energy_log_day(stat_id, date_str)
+        except Exception as e:
+            LOGGER.error(f"Error fetching day energy for {stat_id}: {e}")
+            energy_used = None
+
+        if energy_used is not None and isinstance(energy_used, (list, tuple)) and len(energy_used) > 1:
             self.setDriver('GV0', energy_used[0], uom=45)
             self.setDriver('ST', energy_used[1], uom=33)
             time_uom = 151
@@ -51,8 +56,10 @@ class EnergyLogDayNode(BaseNode):
                     except (ValueError, TypeError):
                         time_uom = 151
             self.setDriver('TIME', get_current_timestamp(time_uom), uom=time_uom)
+            return True
         else:
             LOGGER.error(f"Energy Log Day returned None for {stat_id}")
+            return False
 
     def query(self, command=None):
         self.reportDrivers()
