@@ -4,7 +4,7 @@ import time
 import requests
 import threading
 
-from nodes.base import LOGGER, BaseNode, get_current_timestamp, is_uom151_supported
+from nodes.base import LOGGER, BaseNode, get_current_timestamp, is_uom151_supported, is_dynamic_profile_supported
 
 VERSION = "2.2.20"
 
@@ -441,6 +441,12 @@ class Controller(BaseNode):
 
         return 151 if is_uom151_supported(self.poly) else 58
 
+    def _is_dynamic_profile_supported(self) -> bool:
+        """Check if ISY firmware supports dynamic JSON profile loading (IoX 5.8.0+ and not forceOldFW)."""
+        if self._is_force_old_fw():
+            return False
+        return is_dynamic_profile_supported(self.poly)
+
     def _profiles_match(self, current_profile, expected_profile) -> bool:
         if not isinstance(current_profile, dict) or not isinstance(expected_profile, dict):
             return False
@@ -456,6 +462,25 @@ class Controller(BaseNode):
             if isinstance(drv, dict) and drv.get('driver') == 'TIME':
                 drv['uom'] = self.time_uom
 
+        # 1. Firmware Check: If ISY firmware is old (< 5.8.0) or forceOldFW is enabled,
+        # skip dynamic JSON profile generation and updateJsonProfile entirely,
+        # using the default static profile instead.
+        if not self._is_dynamic_profile_supported():
+            LOGGER.info("[_publish_profile] ISY firmware is old (< 5.8.0) or forceOldFW enabled; using default static profile and skipping updateJsonProfile")
+            if hasattr(self.poly, "updateProfile"):
+                try:
+                    self.poly.updateProfile()
+                    if hasattr(self.poly, "Notices") and hasattr(self.poly.Notices, "delete"):
+                        self.poly.Notices.delete("profile")
+                except Exception as err:
+                    LOGGER.error(f"Static profile update failed: {err}")
+                    if hasattr(self.poly, "Notices") and hasattr(self.poly.Notices, "__setitem__"):
+                        self.poly.Notices["profile"] = f"Profile update failed: {err}"
+            elif hasattr(self.poly, "installprofile"):
+                self.poly.installprofile()
+            return  # <-- Exits here: updateJsonProfile is skipped!
+
+        # 2. Modern Firmware (IoX 5.8.0+): Load dynamic profile via updateJsonProfile
         update_json_profile = getattr(self.poly, "updateJsonProfile", None)
         if not callable(update_json_profile):
             LOGGER.info("[_publish_profile] updateJsonProfile is unavailable, falling back to updateProfile")

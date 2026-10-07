@@ -67,6 +67,11 @@ def is_uom151_supported(poly) -> bool:
         return True
 
 
+def is_dynamic_profile_supported(poly) -> bool:
+    """Check if ISY/IoX firmware supports dynamic JSON profile loading (IoX 5.8.0+ and not forceOldFW)."""
+    return is_uom151_supported(poly)
+
+
 try:
     import udi_interface
     LOGGER = udi_interface.LOGGER

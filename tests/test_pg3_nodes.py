@@ -6,7 +6,7 @@ from datetime import datetime, timezone, timedelta
 from unittest.mock import MagicMock, patch
 from nuheat import NuHeat
 from nodes import ThermostatNode, ThermostatNode_F, ThermostatNode_C, EnergyLogDayNode, EnergyLogWeekNode, EnergyLogYearNode
-from nodes.base import get_current_timestamp, is_uom151_supported
+from nodes.base import get_current_timestamp, is_uom151_supported, is_dynamic_profile_supported
 
 controller_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'nuheat.py'))
 spec = importlib.util.spec_from_file_location("controller_module", controller_path)
@@ -747,6 +747,19 @@ class TestPG3Nodes(unittest.TestCase):
         mock_poly.getIsyVersion.return_value = '5.8.3'
         self.assertTrue(is_uom151_supported(mock_poly))
 
+    def test_is_dynamic_profile_supported(self):
+        mock_poly = MagicMock()
+        mock_poly.pg3init = {'isyVersion': '5.8.4'}
+        self.assertTrue(is_dynamic_profile_supported(mock_poly))
+
+        mock_poly.pg3init = {'isyVersion': '5.3.4'}
+        self.assertFalse(is_dynamic_profile_supported(mock_poly))
+
+        # forceOldFW override
+        mock_poly.pg3init = {'isyVersion': '5.8.4'}
+        mock_poly.customParams = {'forceOldFW': 'true'}
+        self.assertFalse(is_dynamic_profile_supported(mock_poly))
+
     def test_get_current_timestamp(self):
         now = int(time.time())
         ts_151 = get_current_timestamp(151)
@@ -842,7 +855,7 @@ class TestPG3Nodes(unittest.TestCase):
 
     def test_controller_publish_profile(self):
         controller = Controller(self.mock_poly, 'controller', 'controller', 'NuHeat')
-        # Case A: poly has updateJsonProfile
+        # Case A: poly has updateJsonProfile on modern FW (default)
         self.mock_poly.updateJsonProfile = MagicMock()
         self.mock_poly.updateProfile = MagicMock()
         controller._publish_profile(wait_response=True)
@@ -853,6 +866,23 @@ class TestPG3Nodes(unittest.TestCase):
         delattr(self.mock_poly, 'updateJsonProfile')
         controller._last_profile_hash = None
         controller._publish_profile(wait_response=True)
+        self.mock_poly.updateProfile.assert_called_once()
+
+        # Case C: Old FW (e.g. 5.3.4) with updateJsonProfile callable -> must NOT call updateJsonProfile, calls updateProfile
+        self.mock_poly.updateJsonProfile = MagicMock()
+        self.mock_poly.updateProfile.reset_mock()
+        self.mock_poly.pg3init = {'isyVersion': '5.3.4'}
+        controller._publish_profile(wait_response=True)
+        self.mock_poly.updateJsonProfile.assert_not_called()
+        self.mock_poly.updateProfile.assert_called_once()
+
+        # Case D: Modern FW with forceOldFW enabled -> must NOT call updateJsonProfile, calls updateProfile
+        self.mock_poly.updateJsonProfile.reset_mock()
+        self.mock_poly.updateProfile.reset_mock()
+        self.mock_poly.pg3init = {'isyVersion': '5.8.4'}
+        controller.customParams = {'forceOldFW': 'true'}
+        controller._publish_profile(wait_response=True)
+        self.mock_poly.updateJsonProfile.assert_not_called()
         self.mock_poly.updateProfile.assert_called_once()
 
     def test_time_not_updated_on_error_thermostat_node(self):
