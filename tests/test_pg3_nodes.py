@@ -216,7 +216,7 @@ class TestPG3Nodes(unittest.TestCase):
         # Test update_info in Auto mode (CLISPH reports active setpoint, GV4=0)
         node.update_info()
         node.setDriver.assert_any_call('ST', 68.0, uom=17)
-        node.setDriver.assert_any_call('CLIHCS', 1, uom=66)
+        node.setDriver.assert_any_call('CLIHCS', 1, uom=25)
         node.setDriver.assert_any_call('CLIMD', 1, uom=25)
         node.setDriver.assert_any_call('CLISPH', 69.8, uom=17)
         node.setDriver.assert_any_call('GV4', 0, uom=45)
@@ -335,7 +335,7 @@ class TestPG3Nodes(unittest.TestCase):
         node.setDriver.assert_any_call('ST', 20.0, uom=4)
         node.setDriver.assert_any_call('CLISPH', 21.0, uom=4)
         node.setDriver.assert_any_call('CLIMD', 3, uom=25)
-        node.setDriver.assert_any_call('CLIHCS', 0, uom=66)
+        node.setDriver.assert_any_call('CLIHCS', 0, uom=25)
         node.setDriver.assert_any_call('GV4', 0, uom=45)
         node.setDriver.assert_any_call('GV5', 0, uom=2)
 
@@ -411,7 +411,7 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertTrue(os.path.isfile(version_path))
         with open(version_path, 'r') as f:
             v_content = f.read().strip()
-        self.assertEqual(v_content, "2.2.21")
+        self.assertEqual(v_content, "2.2.22")
 
         # Check editors.xml
         editors_path = os.path.join(repo_dir, 'profile', 'editor', 'editors.xml')
@@ -768,10 +768,14 @@ class TestPG3Nodes(unittest.TestCase):
         ts_137 = get_current_timestamp(137)
         self.assertAlmostEqual(ts_137, now, delta=2)
 
+        start = now - 60
+        ts_58 = get_current_timestamp(58, start)
+        self.assertAlmostEqual(ts_58, 60, delta=2)
+
     def test_build_profile_definition(self):
         # Fahrenheit profile with UOM 151
         profile_f_151 = _build_profile_definition(temp_unit="F", time_uom=151)
-        self.assertEqual(profile_f_151['version'], "2.2.21")
+        self.assertEqual(profile_f_151['version'], "2.2.22")
         editors_f = {e['id']: e for e in profile_f_151['editors']}
         self.assertIn('TEMPF', editors_f)
         self.assertIn('TEMPFINPUT', editors_f)
@@ -789,7 +793,7 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertIn('TEMPCINPUT', editors_c)
         self.assertEqual(editors_c['TIMESTAMP']['ranges'][0]['uom'], '58')
         time_prop_c = [p for nd in profile_c_58['nodedefs'] for p in nd['properties'] if p['id'] == 'TIME'][0]
-        self.assertEqual(time_prop_c['name'], 'Time since 1980')
+        self.assertEqual(time_prop_c['name'], 'Time since node started')
 
         # Verify nodedefs have UPPERCASE IDs and no underscores
         for nd in profile_f_151['nodedefs']:
@@ -822,7 +826,7 @@ class TestPG3Nodes(unittest.TestCase):
 
         now = int(time.time())
         c_time = controller.get_current_time()
-        self.assertAlmostEqual(c_time, now, delta=2)
+        self.assertAlmostEqual(c_time, 0, delta=2)
 
         # Thermostat created under this controller
         node = ThermostatNode(mock_poly, 'controller', '99887766', 'Bath', controller=controller)

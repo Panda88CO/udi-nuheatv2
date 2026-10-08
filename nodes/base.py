@@ -1,9 +1,15 @@
 import logging
 import time
 
-def get_current_timestamp(uom: int = 151) -> int:
-    """Return the current Unix timestamp (seconds since Jan 1, 1970 UTC)."""
-    return int(time.time())
+NODE_SERVER_START_TIME = int(time.time())
+
+def get_current_timestamp(uom: int = 151, start_time: int = None) -> int:
+    """Return the current timestamp. For UOM 58, returns elapsed seconds since node started."""
+    now = int(time.time())
+    if int(uom) == 58:
+        base = start_time if start_time is not None else NODE_SERVER_START_TIME
+        return max(0, now - int(base))
+    return now
 
 
 def is_uom151_supported(poly) -> bool:

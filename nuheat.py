@@ -6,7 +6,7 @@ import threading
 
 from nodes.base import LOGGER, BaseNode, get_current_timestamp, is_uom151_supported, is_dynamic_profile_supported
 
-VERSION = "2.2.21"
+VERSION = "2.2.22"
 
 try:
     import udi_interface
@@ -61,9 +61,9 @@ def _build_profile_definition(temp_unit: str = "F", time_uom: int = 151) -> dict
 
     Dynamic profile includes all editors and nodedefs mirroring editors.xml and nodedefs.xml,
     with TIMESTAMP editor dynamically assigned time_uom (151 for modern IoX, 58 for ISY-994).
-    When time_uom is not 151, TIME property is labeled as 'Time since 1980'.
+    When time_uom is not 151, TIME property is labeled as 'Time since node started'.
     """
-    time_label = "Last Update" if int(time_uom) == 151 else "Time since 1980"
+    time_label = "Last Update" if int(time_uom) == 151 else "Time since node started"
     editors = [
         {
             "id": "ONLINE",
@@ -74,7 +74,7 @@ def _build_profile_definition(temp_unit: str = "F", time_uom: int = 151) -> dict
         {
             "id": "CLIHCS",
             "ranges": [
-                {"uom": "66", "subset": "0,1", "names": {"0": "Idle", "1": "Heating"}}
+                {"uom": "25", "subset": "0,1", "names": {"0": "Idle", "1": "Heating"}}
             ],
         },
         {
@@ -287,6 +287,7 @@ class Controller(BaseNode):
                 drv['uom'] = self.time_uom
         self.tz = "America/New_York"
         self.disco = 0
+        self.start_time = int(time.time())
 
         self.client_id = None
         self.client_secret = None
@@ -392,7 +393,7 @@ class Controller(BaseNode):
 
     def get_current_time(self) -> int:
         """Return the current timestamp formatted for the target time_uom."""
-        return get_current_timestamp(self.time_uom)
+        return get_current_timestamp(self.time_uom, getattr(self, 'start_time', None))
 
     def _is_force_old_fw(self) -> bool:
         """Check if forceOldFW is enabled in customParams."""
@@ -772,7 +773,8 @@ class Controller(BaseNode):
                         if isinstance(drv, dict) and drv.get('driver') == 'TIME':
                             drv['uom'] = self.time_uom
                     if hasattr(node, 'setDriver'):
-                        node.setDriver('TIME', get_current_timestamp(self.time_uom), uom=self.time_uom)
+                        node_time = getattr(node, 'get_current_time', lambda: get_current_timestamp(self.time_uom, getattr(node, 'start_time', None)))()
+                        node.setDriver('TIME', node_time, uom=self.time_uom)
 
         self.update_oauth_config()
         self.handleCustomParamsDone = True
@@ -781,6 +783,8 @@ class Controller(BaseNode):
 
     def start(self):
         LOGGER.info('Starting NuHeat NodeServer...')
+        if not hasattr(self, 'start_time') or not self.start_time:
+            self.start_time = int(time.time())
 
         # In PG3 multi-threaded startup, ensure customParams, customNS, and config are handled before starting
         wait_seconds = 0

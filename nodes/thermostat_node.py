@@ -61,7 +61,7 @@ class ThermostatNode(BaseNode):
         {'driver': 'ST', 'value': 0, 'uom': 17},
         {'driver': 'CLISPH', 'value': 0, 'uom': 17},
         {'driver': 'CLIMD', 'value': 1, 'uom': 25},
-        {'driver': 'CLIHCS', 'value': 0, 'uom': 66},
+        {'driver': 'CLIHCS', 'value': 0, 'uom': 25},
         {'driver': 'GV0', 'value': 0, 'uom': 33},
         {'driver': 'GV1', 'value': 0, 'uom': 33},
         {'driver': 'GV2', 'value': 0, 'uom': 33},
@@ -77,6 +77,7 @@ class ThermostatNode(BaseNode):
             polyglot = polyglot.poly
         super(ThermostatNode, self).__init__(polyglot, primary, address, name)
         self.controller = controller
+        self.start_time = int(time.time())
 
         if temp_uom is not None and isinstance(temp_uom, (int, str)):
             try:
@@ -118,7 +119,7 @@ class ThermostatNode(BaseNode):
                 {'driver': 'ST', 'value': 0, 'uom': 4},
                 {'driver': 'CLISPH', 'value': 0, 'uom': 4},
                 {'driver': 'CLIMD', 'value': 1, 'uom': 25},
-                {'driver': 'CLIHCS', 'value': 0, 'uom': 66},
+                {'driver': 'CLIHCS', 'value': 0, 'uom': 25},
                 {'driver': 'GV0', 'value': 0, 'uom': 33},
                 {'driver': 'GV1', 'value': 0, 'uom': 33},
                 {'driver': 'GV2', 'value': 0, 'uom': 33},
@@ -132,7 +133,13 @@ class ThermostatNode(BaseNode):
                 if isinstance(drv, dict) and drv.get('driver') == 'TIME':
                     drv['uom'] = self.time_uom
 
+    def get_current_time(self) -> int:
+        """Return the current timestamp formatted for the target time_uom."""
+        return get_current_timestamp(self.time_uom, getattr(self, 'start_time', None))
+
     def start(self):
+        if not hasattr(self, 'start_time') or not self.start_time:
+            self.start_time = int(time.time())
         self.update_info()
         self.update_energy()
 
@@ -170,7 +177,7 @@ class ThermostatNode(BaseNode):
 
             clihcs = 1 if stat.get('isHeating') else 0
             self.setDriver('ST', clitemp, uom=self.temp_uom)
-            self.setDriver('CLIHCS', clihcs, uom=66)
+            self.setDriver('CLIHCS', clihcs, uom=25)
 
             mode_val = stat.get('mode', stat.get('operatingMode', 1))
             hold_until = stat.get('holdUntil') or stat.get('holdSetPointDateTime')
@@ -207,7 +214,7 @@ class ThermostatNode(BaseNode):
             online_val = 1 if stat.get('online', True) else 0
             self.setDriver('GV5', online_val, uom=2)
 
-            self.setDriver('TIME', get_current_timestamp(self.time_uom), uom=self.time_uom)
+            self.setDriver('TIME', self.get_current_time(), uom=self.time_uom)
             return True
         else:
             LOGGER.error(f"Thermostat {self.address} not available or returned None")
@@ -291,7 +298,7 @@ class ThermostatNode(BaseNode):
             summary_parts.append(f"Yearly (GV3): {year_val} kWh")
 
         if has_valid_energy:
-            self.setDriver('TIME', get_current_timestamp(self.time_uom), uom=self.time_uom)
+            self.setDriver('TIME', self.get_current_time(), uom=self.time_uom)
             LOGGER.info(
                 f"Thermostat {self.address} ({self.name}) Energy Updated -> " + ", ".join(summary_parts)
             )
@@ -320,7 +327,7 @@ class ThermostatNode(BaseNode):
         if ok:
             self.setDriver('CLIMD', 1, uom=25)
             self.setDriver('GV4', 0, uom=45)
-            self.setDriver('TIME', get_current_timestamp(self.time_uom), uom=self.time_uom)
+            self.setDriver('TIME', self.get_current_time(), uom=self.time_uom)
             return True
         else:
             LOGGER.error(f"set_mode_auto failed for {self.address}")
@@ -358,7 +365,7 @@ class ThermostatNode(BaseNode):
             self.setDriver('CLIMD', 3, uom=25)
             self.setDriver('CLISPH', temp, uom=self.temp_uom)
             self.setDriver('GV4', 0, uom=45)
-            self.setDriver('TIME', get_current_timestamp(self.time_uom), uom=self.time_uom)
+            self.setDriver('TIME', self.get_current_time(), uom=self.time_uom)
             return True
         else:
             LOGGER.error(f"set_mode_manual failed for {self.address}")
@@ -415,7 +422,7 @@ class ThermostatNode(BaseNode):
             self.setDriver('CLIMD', 2, uom=25)
             self.setDriver('CLISPH', temp, uom=self.temp_uom)
             self.setDriver('GV4', hold_mins, uom=45)
-            self.setDriver('TIME', get_current_timestamp(self.time_uom), uom=self.time_uom)
+            self.setDriver('TIME', self.get_current_time(), uom=self.time_uom)
             return True
         else:
             LOGGER.error(f"set_mode_hold failed for {self.address}")
@@ -439,7 +446,7 @@ class ThermostatNode_F(ThermostatNode):
         {'driver': 'ST', 'value': 0, 'uom': 17},
         {'driver': 'CLISPH', 'value': 0, 'uom': 17},
         {'driver': 'CLIMD', 'value': 1, 'uom': 25},
-        {'driver': 'CLIHCS', 'value': 0, 'uom': 66},
+        {'driver': 'CLIHCS', 'value': 0, 'uom': 25},
         {'driver': 'GV0', 'value': 0, 'uom': 33},
         {'driver': 'GV1', 'value': 0, 'uom': 33},
         {'driver': 'GV2', 'value': 0, 'uom': 33},
@@ -459,7 +466,7 @@ class ThermostatNode_C(ThermostatNode):
         {'driver': 'ST', 'value': 0, 'uom': 4},
         {'driver': 'CLISPH', 'value': 0, 'uom': 4},
         {'driver': 'CLIMD', 'value': 1, 'uom': 25},
-        {'driver': 'CLIHCS', 'value': 0, 'uom': 66},
+        {'driver': 'CLIHCS', 'value': 0, 'uom': 25},
         {'driver': 'GV0', 'value': 0, 'uom': 33},
         {'driver': 'GV1', 'value': 0, 'uom': 33},
         {'driver': 'GV2', 'value': 0, 'uom': 33},

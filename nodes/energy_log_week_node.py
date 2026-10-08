@@ -21,8 +21,11 @@ class EnergyLogWeekNode(BaseNode):
         super(EnergyLogWeekNode, self).__init__(polyglot, primary, address, name)
         self.controller = controller
         self.stat_address = address[3:] if address.startswith('elw') else primary
+        self.start_time = int(time.time())
 
     def start(self):
+        if not hasattr(self, 'start_time') or self.start_time is None:
+            self.start_time = int(time.time())
         self.update_info()
 
     def update_info(self):
@@ -55,7 +58,7 @@ class EnergyLogWeekNode(BaseNode):
                         time_uom = int(val)
                     except (ValueError, TypeError):
                         time_uom = 151
-            self.setDriver('TIME', get_current_timestamp(time_uom), uom=time_uom)
+            self.setDriver('TIME', get_current_timestamp(time_uom, getattr(self, 'start_time', None)), uom=time_uom)
             return True
         else:
             LOGGER.error(f"Energy Log Week returned None for {stat_id}")
