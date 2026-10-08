@@ -6,7 +6,7 @@ import threading
 
 from nodes.base import LOGGER, BaseNode, get_current_timestamp, is_uom151_supported, is_dynamic_profile_supported
 
-VERSION = "2.2.20"
+VERSION = "2.2.21"
 
 try:
     import udi_interface
