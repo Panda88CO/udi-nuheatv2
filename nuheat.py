@@ -6,7 +6,7 @@ import threading
 
 from nodes.base import LOGGER, BaseNode, get_current_timestamp, is_uom151_supported, is_dynamic_profile_supported
 
-VERSION = "2.2.22"
+VERSION = "2.2.23"
 
 try:
     import udi_interface
@@ -181,7 +181,7 @@ def _build_profile_definition(temp_unit: str = "F", time_uom: int = 151) -> dict
                         "name": "Set Hold",
                         "parameters": [
                             {"id": "TEMPHOLDF", "name": "Temperature", "editor": "TEMPFINPUT", "init": "CLISPH"},
-                            {"id": "HOLD", "name": "Hold Minutes", "editor": "HOLDMINS"},
+                            {"id": "HOLD", "name": "Hold Minutes", "editor": "HOLDMINS", "init": "GV4"},
                         ],
                     },
                     {
@@ -222,7 +222,7 @@ def _build_profile_definition(temp_unit: str = "F", time_uom: int = 151) -> dict
                         "name": "Set Hold",
                         "parameters": [
                             {"id": "TEMPHOLDC", "name": "Temperature", "editor": "TEMPCINPUT", "init": "CLISPH"},
-                            {"id": "HOLD", "name": "Hold Minutes", "editor": "HOLDMINS"},
+                            {"id": "HOLD", "name": "Hold Minutes", "editor": "HOLDMINS", "init": "GV4"},
                         ],
                     },
                     {

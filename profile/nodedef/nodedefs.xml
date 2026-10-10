@@ -41,7 +41,7 @@
         <cmd id="SETAUTO" />
         <cmd id="SETHOLD">
           <p id="TEMPHOLDF" editor="TEMPFINPUT" init="CLISPH" />
-          <p id="HOLD" editor="HOLDMINS" />
+          <p id="HOLD" editor="HOLDMINS" init="GV4" />
         </cmd>
         <cmd id="SETPERMHOLD">
           <p id="" editor="TEMPFINPUT" init="CLISPH" />
@@ -74,7 +74,7 @@
         <cmd id="SETAUTO" />
         <cmd id="SETHOLD">
           <p id="TEMPHOLDC" editor="TEMPCINPUT" init="CLISPH" />
-          <p id="HOLD" editor="HOLDMINS" />
+          <p id="HOLD" editor="HOLDMINS" init="GV4" />
         </cmd>
         <cmd id="SETPERMHOLD">
           <p id="" editor="TEMPCINPUT" init="CLISPH" />

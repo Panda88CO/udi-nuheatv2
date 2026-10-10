@@ -411,7 +411,7 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertTrue(os.path.isfile(version_path))
         with open(version_path, 'r') as f:
             v_content = f.read().strip()
-        self.assertEqual(v_content, "2.2.22")
+        self.assertEqual(v_content, "2.2.23")
 
         # Check editors.xml
         editors_path = os.path.join(repo_dir, 'profile', 'editor', 'editors.xml')
@@ -518,8 +518,11 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertIn('SETPERMHOLD', cmds_f)
         self.assertIn('SETAUTO', cmds_f)
         params_f = {p.get('id'): p.get('editor') for p in cmds_f['SETHOLD'].findall('p')}
+        init_f = {p.get('id'): p.get('init') for p in cmds_f['SETHOLD'].findall('p')}
         self.assertEqual(params_f['TEMPHOLDF'], 'TEMPFINPUT')
+        self.assertEqual(init_f['TEMPHOLDF'], 'CLISPH')
         self.assertEqual(params_f['HOLD'], 'HOLDMINS')
+        self.assertEqual(init_f['HOLD'], 'GV4')
         self.assertNotIn('tempholdF', params_f)
         self.assertNotIn('hold', params_f)
 
@@ -539,8 +542,11 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertIn('SETPERMHOLD', cmds_c)
         self.assertIn('SETAUTO', cmds_c)
         params_c = {p.get('id'): p.get('editor') for p in cmds_c['SETHOLD'].findall('p')}
+        init_c = {p.get('id'): p.get('init') for p in cmds_c['SETHOLD'].findall('p')}
         self.assertEqual(params_c['TEMPHOLDC'], 'TEMPCINPUT')
+        self.assertEqual(init_c['TEMPHOLDC'], 'CLISPH')
         self.assertEqual(params_c['HOLD'], 'HOLDMINS')
+        self.assertEqual(init_c['HOLD'], 'GV4')
         self.assertNotIn('tempholdC', params_c)
         self.assertNotIn('hold', params_c)
 
@@ -775,7 +781,7 @@ class TestPG3Nodes(unittest.TestCase):
     def test_build_profile_definition(self):
         # Fahrenheit profile with UOM 151
         profile_f_151 = _build_profile_definition(temp_unit="F", time_uom=151)
-        self.assertEqual(profile_f_151['version'], "2.2.22")
+        self.assertEqual(profile_f_151['version'], "2.2.23")
         editors_f = {e['id']: e for e in profile_f_151['editors']}
         self.assertIn('TEMPF', editors_f)
         self.assertIn('TEMPFINPUT', editors_f)
@@ -783,6 +789,12 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertIn('ONLINE', editors_f)
         self.assertIn('TIMESTAMP', editors_f)
         self.assertEqual(editors_f['TIMESTAMP']['ranges'][0]['uom'], '151')
+
+        # Verify SETHOLD parameters have init CLISPH and GV4
+        set_hold_cmd = [c for nd in profile_f_151['nodedefs'] for c in nd.get('cmds', {}).get('accepts', []) if c['id'] == 'SETHOLD'][0]
+        params = {p['id']: p for p in set_hold_cmd['parameters']}
+        self.assertEqual(params['HOLD']['init'], 'GV4')
+        self.assertEqual(params['TEMPHOLDF']['init'], 'CLISPH')
         time_prop_f = [p for nd in profile_f_151['nodedefs'] for p in nd['properties'] if p['id'] == 'TIME'][0]
         self.assertEqual(time_prop_f['name'], 'Last Update')
 
