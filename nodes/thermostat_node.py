@@ -143,18 +143,19 @@ class ThermostatNode(BaseNode):
         self.update_info()
         self.update_energy()
 
-    def update_info(self):
+    def update_info(self, stat=None):
         nuheat_client = getattr(self.controller, 'NuHeat', None)
         if nuheat_client is None:
             LOGGER.error("NuHeat client not available on controller")
             return False
 
-        try:
-            stat = nuheat_client.get_thermostat(self.address)
-        except Exception as e:
-            LOGGER.error(f"Error retrieving thermostat {self.address}: {e}")
-            self.setDriver('GV5', 0, uom=2)
-            return False
+        if stat is None:
+            try:
+                stat = nuheat_client.get_thermostat(self.address)
+            except Exception as e:
+                LOGGER.error(f"Error retrieving thermostat {self.address}: {e}")
+                self.setDriver('GV5', 0, uom=2)
+                return False
 
         if isinstance(stat, list):
             found = None

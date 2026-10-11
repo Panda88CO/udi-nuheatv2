@@ -411,7 +411,7 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertTrue(os.path.isfile(version_path))
         with open(version_path, 'r') as f:
             v_content = f.read().strip()
-        self.assertEqual(v_content, "2.2.23")
+        self.assertEqual(v_content, "2.2.24")
 
         # Check editors.xml
         editors_path = os.path.join(repo_dir, 'profile', 'editor', 'editors.xml')
@@ -706,6 +706,8 @@ class TestPG3Nodes(unittest.TestCase):
         controller.oauthReady = True
         controller.get_access_token = MagicMock(return_value='test_valid_token')
         controller.discover = MagicMock()
+        controller.longPoll = MagicMock()
+        controller.NuHeat.get_account = MagicMock(return_value={'temperatureScale': 'Fahrenheit'})
         controller._publish_profile = MagicMock()
 
         controller.start()
@@ -781,7 +783,7 @@ class TestPG3Nodes(unittest.TestCase):
     def test_build_profile_definition(self):
         # Fahrenheit profile with UOM 151
         profile_f_151 = _build_profile_definition(temp_unit="F", time_uom=151)
-        self.assertEqual(profile_f_151['version'], "2.2.23")
+        self.assertEqual(profile_f_151['version'], "2.2.24")
         editors_f = {e['id']: e for e in profile_f_151['editors']}
         self.assertIn('TEMPF', editors_f)
         self.assertIn('TEMPFINPUT', editors_f)
@@ -987,6 +989,7 @@ class TestPG3Nodes(unittest.TestCase):
         mock_poly = MagicMock()
         mock_poly.pg3init = {'isyVersion': '5.8.4'}
         controller = Controller(mock_poly, 'controller', 'controller', 'NuHeat')
+        controller.NuHeat.get_thermostat = MagicMock(return_value=[{'serialNumber': '99887766'}])
         controller.disco = 1
         controller.setDriver = MagicMock()
 

@@ -1,5 +1,6 @@
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, call
+import requests
 from nuheat.nuheat import NuHeat
 
 class TestNuHeatClient(unittest.TestCase):
@@ -17,8 +18,8 @@ class TestNuHeatClient(unittest.TestCase):
         current_token = 'token_v2_refreshed'
         self.assertEqual(client.headers['Authorization'], 'Bearer token_v2_refreshed')
 
-    @patch('requests.get')
-    def test_get_account(self, mock_get):
+    @patch.object(requests.Session, 'request')
+    def test_get_account(self, mock_request):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {
@@ -26,17 +27,22 @@ class TestNuHeatClient(unittest.TestCase):
             'temperatureScale': 'Fahrenheit',
             'language': 'en'
         }
-        mock_get.return_value = mock_resp
+        mock_request.return_value = mock_resp
 
         client = NuHeat('dummy')
         account = client.get_account()
         self.assertIsNotNone(account)
         self.assertEqual(account['userName'], 'Jane Doe')
         self.assertEqual(account['temperatureScale'], 'Fahrenheit')
-        mock_get.assert_called_once_with('https://api.mynuheat.com/api/v2/Account', headers=client.headers)
+        mock_request.assert_called_once_with(
+            'GET',
+            'https://api.mynuheat.com/api/v2/Account',
+            headers=client.headers,
+            timeout=10
+        )
 
-    @patch('requests.get')
-    def test_get_thermostat_list_and_normalization(self, mock_get):
+    @patch.object(requests.Session, 'request')
+    def test_get_thermostat_list_and_normalization(self, mock_request):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = [{
@@ -50,7 +56,7 @@ class TestNuHeatClient(unittest.TestCase):
             'mode': 2,
             'errorState': None
         }]
-        mock_get.return_value = mock_resp
+        mock_request.return_value = mock_resp
 
         client = NuHeat('dummy')
         stats = client.get_thermostat()
@@ -64,10 +70,15 @@ class TestNuHeatClient(unittest.TestCase):
         self.assertEqual(stat['holdUntil'], '2026-09-06T18:00:00Z')
         self.assertEqual(stat['holdSetPointDateTime'], '2026-09-06T18:00:00Z')
         self.assertIsNone(stat['error'])
-        mock_get.assert_called_once_with('https://api.mynuheat.com/api/v2/Thermostat', headers=client.headers)
+        mock_request.assert_called_once_with(
+            'GET',
+            'https://api.mynuheat.com/api/v2/Thermostat',
+            headers=client.headers,
+            timeout=10
+        )
 
-    @patch('requests.get')
-    def test_get_single_thermostat(self, mock_get):
+    @patch.object(requests.Session, 'request')
+    def test_get_single_thermostat(self, mock_request):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {
@@ -77,39 +88,47 @@ class TestNuHeatClient(unittest.TestCase):
             'setPointTemperature': 2000,
             'mode': 1
         }
-        mock_get.return_value = mock_resp
+        mock_request.return_value = mock_resp
 
         client = NuHeat('dummy')
         stat = client.get_thermostat('87654321')
         self.assertEqual(stat['serialNumber'], '87654321')
         self.assertEqual(stat['setPointTemp'], 2000)
-        mock_get.assert_called_once_with('https://api.mynuheat.com/api/v2/Thermostat/87654321', headers=client.headers)
+        mock_request.assert_called_once_with(
+            'GET',
+            'https://api.mynuheat.com/api/v2/Thermostat/87654321',
+            headers=client.headers,
+            timeout=10
+        )
 
-    @patch('requests.put')
-    def test_set_mode_auto(self, mock_put):
+    @patch.object(requests.Session, 'request')
+    def test_set_mode_auto(self, mock_request):
         mock_resp = MagicMock()
         mock_resp.status_code = 204
-        mock_put.return_value = mock_resp
+        mock_request.return_value = mock_resp
 
         client = NuHeat('dummy')
         res = client.set_mode_auto('12345678')
         self.assertTrue(res)
-        mock_put.assert_called_once_with(
+        mock_request.assert_called_once_with(
+            'PUT',
             'https://api.mynuheat.com/api/v2/Mode/Auto',
             headers=client.headers,
-            json={'serialNumber': '12345678'}
+            json={'serialNumber': '12345678'},
+            timeout=10
         )
 
-    @patch('requests.put')
-    def test_set_mode_hold(self, mock_put):
+    @patch.object(requests.Session, 'request')
+    def test_set_mode_hold(self, mock_request):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        mock_put.return_value = mock_resp
+        mock_request.return_value = mock_resp
 
         client = NuHeat('dummy')
         res = client.set_mode_hold('12345678', 2300, hold_until='2026-09-06T20:00:00Z')
         self.assertTrue(res)
-        mock_put.assert_called_once_with(
+        mock_request.assert_called_once_with(
+            'PUT',
             'https://api.mynuheat.com/api/v2/Mode/Hold',
             headers=client.headers,
             json={
@@ -117,42 +136,47 @@ class TestNuHeatClient(unittest.TestCase):
                 'temperature': 2300,
                 'temperatureType': 0,
                 'holdUntil': '2026-09-06T20:00:00Z'
-            }
+            },
+            timeout=10
         )
 
-    @patch('requests.put')
-    def test_set_mode_manual(self, mock_put):
+    @patch.object(requests.Session, 'request')
+    def test_set_mode_manual(self, mock_request):
         mock_resp = MagicMock()
         mock_resp.status_code = 204
-        mock_put.return_value = mock_resp
+        mock_request.return_value = mock_resp
 
         client = NuHeat('dummy')
         res = client.set_mode_manual('12345678', 2100)
         self.assertTrue(res)
-        mock_put.assert_called_once_with(
+        mock_request.assert_called_once_with(
+            'PUT',
             'https://api.mynuheat.com/api/v2/Mode/Manual',
             headers=client.headers,
-            json={'serialNumber': '12345678', 'temperature': 2100, 'temperatureType': 0}
+            json={'serialNumber': '12345678', 'temperature': 2100, 'temperatureType': 0},
+            timeout=10
         )
 
-    @patch('requests.put')
-    def test_set_thermostat_setpoint_compat(self, mock_put):
+    @patch.object(requests.Session, 'request')
+    def test_set_thermostat_setpoint_compat(self, mock_request):
         mock_resp = MagicMock()
         mock_resp.status_code = 204
-        mock_put.return_value = mock_resp
+        mock_request.return_value = mock_resp
 
         client = NuHeat('dummy')
         # Default behavior routes to hold
         res = client.set_thermostat_setpoint('12345678', 2250)
         self.assertTrue(res)
-        mock_put.assert_called_with(
+        mock_request.assert_called_with(
+            'PUT',
             'https://api.mynuheat.com/api/v2/Mode/Hold',
             headers=client.headers,
-            json={'serialNumber': '12345678', 'temperature': 2250, 'temperatureType': 0}
+            json={'serialNumber': '12345678', 'temperature': 2250, 'temperatureType': 0},
+            timeout=10
         )
 
-    @patch('requests.get')
-    def test_get_energy_log_day(self, mock_get):
+    @patch.object(requests.Session, 'request')
+    def test_get_energy_log_day(self, mock_request):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {
@@ -162,18 +186,20 @@ class TestNuHeatClient(unittest.TestCase):
                 {'entry': '1', 'minutes': 30, 'energyKWattHour': 0.50, 'chargeKWattHour': 7.0}
             ]
         }
-        mock_get.return_value = mock_resp
+        mock_request.return_value = mock_resp
 
         client = NuHeat('dummy')
         result = client.get_energy_log_day('12345678', '2026-09-06')
         self.assertEqual(result, [45, 0.75, 0.10])  # 3.0 + 7.0 = 10.0 cents -> 0.10 usd
-        mock_get.assert_called_once_with(
+        mock_request.assert_called_once_with(
+            'GET',
             'https://api.mynuheat.com/api/v1/EnergyLog/Day/12345678/2026-09-06',
-            headers=client.headers
+            headers=client.headers,
+            timeout=10
         )
 
-    @patch('requests.get')
-    def test_get_energy_log_month_and_year(self, mock_get):
+    @patch.object(requests.Session, 'request')
+    def test_get_energy_log_month_and_year(self, mock_request):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {
@@ -184,7 +210,7 @@ class TestNuHeatClient(unittest.TestCase):
                 {'entry': '9', 'minutes': 60, 'energyKWattHour': 1.50, 'chargeKWattHour': 20.0}
             ]
         }
-        mock_get.return_value = mock_resp
+        mock_request.return_value = mock_resp
 
         client = NuHeat('dummy')
         month_res = client.get_energy_log_month('12345678', '2026', 9)
@@ -194,15 +220,17 @@ class TestNuHeatClient(unittest.TestCase):
         year_res = client.get_energy_log_year('12345678', '2026')
         self.assertEqual(year_res, [90, 1.75, 0.25])
 
-        # Verify caching: mock_get was only called once for both month and year queries
-        mock_get.assert_called_once_with(
+        # Verify caching: mock_request was only called once for both month and year queries
+        mock_request.assert_called_once_with(
+            'GET',
             'https://api.mynuheat.com/api/v1/EnergyLog/Month/12345678/2026',
-            headers=client.headers
+            headers=client.headers,
+            timeout=10
         )
 
-    @patch('requests.get')
-    def test_get_energy_summary_live_format(self, mock_get):
-        def mock_dispatch(url, headers=None):
+    @patch.object(requests.Session, 'request')
+    def test_get_energy_summary_live_format(self, mock_request):
+        def mock_dispatch(method, url, headers=None, timeout=None, **kwargs):
             resp = MagicMock()
             resp.status_code = 200
             if 'EnergyLog/Day/' in url:
@@ -234,7 +262,7 @@ class TestNuHeatClient(unittest.TestCase):
                 }
             return resp
 
-        mock_get.side_effect = mock_dispatch
+        mock_request.side_effect = mock_dispatch
 
         client = NuHeat('dummy')
         summary = client.get_energy_summary('1262811', '2026-09-12', '2026', 9)
@@ -257,12 +285,12 @@ class TestNuHeatClient(unittest.TestCase):
         self.assertEqual(client.nuheat_cents_to_dollars(150), 1.50)
 
     @patch('nuheat.nuheat.LOGGER.debug')
-    @patch('requests.get')
-    def test_logger_debug_formatted_json(self, mock_get, mock_debug):
+    @patch.object(requests.Session, 'request')
+    def test_logger_debug_formatted_json(self, mock_request, mock_debug):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {'result': 'ok'}
-        mock_get.return_value = mock_resp
+        mock_request.return_value = mock_resp
 
         client = NuHeat('dummy')
         client.get_account()
@@ -271,6 +299,173 @@ class TestNuHeatClient(unittest.TestCase):
         log_msg = mock_debug.call_args[0][0]
         self.assertIn('"result": "ok"', log_msg)
         self.assertIn("HTTP 200", log_msg)
+
+    # -------------------------------------------------------------
+    # New Phase 1 Tests: Timeout, Retries, Backoff, Caching, Close
+    # -------------------------------------------------------------
+
+    @patch.object(requests.Session, 'request')
+    def test_enforced_and_configurable_timeout(self, mock_request):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {'userName': 'Test'}
+        mock_request.return_value = mock_resp
+
+        # Default timeout
+        client = NuHeat('dummy')
+        self.assertEqual(client.timeout, 10)
+        client.get_account()
+        mock_request.assert_called_with('GET', 'https://api.mynuheat.com/api/v2/Account', headers=client.headers, timeout=10)
+
+        # Custom configured timeout
+        client.timeout = 15
+        client.get_account()
+        mock_request.assert_called_with('GET', 'https://api.mynuheat.com/api/v2/Account', headers=client.headers, timeout=15)
+
+    @patch('time.sleep')
+    @patch.object(requests.Session, 'request')
+    def test_retry_on_5xx_server_error(self, mock_request, mock_sleep):
+        resp_500 = MagicMock()
+        resp_500.status_code = 500
+        resp_500.text = "Internal Server Error"
+
+        resp_200 = MagicMock()
+        resp_200.status_code = 200
+        resp_200.json.return_value = {'userName': 'Success After Retry'}
+
+        mock_request.side_effect = [resp_500, resp_200]
+
+        client = NuHeat('dummy')
+        account = client.get_account()
+        self.assertIsNotNone(account)
+        self.assertEqual(account['userName'], 'Success After Retry')
+        self.assertEqual(mock_request.call_count, 2)
+        mock_sleep.assert_called_once_with(2.0)
+
+    @patch('time.sleep')
+    @patch.object(requests.Session, 'request')
+    def test_retry_on_429_respects_retry_after(self, mock_request, mock_sleep):
+        resp_429 = MagicMock()
+        resp_429.status_code = 429
+        resp_429.headers = {'Retry-After': '5'}
+        resp_429.text = "Too Many Requests"
+
+        resp_200 = MagicMock()
+        resp_200.status_code = 200
+        resp_200.json.return_value = {'userName': 'Rate Limit Recovered'}
+
+        mock_request.side_effect = [resp_429, resp_200]
+
+        client = NuHeat('dummy')
+        account = client.get_account()
+        self.assertIsNotNone(account)
+        self.assertEqual(account['userName'], 'Rate Limit Recovered')
+        self.assertEqual(mock_request.call_count, 2)
+        mock_sleep.assert_called_once_with(5.0)
+
+    @patch('time.sleep')
+    @patch.object(requests.Session, 'request')
+    def test_retry_on_401_unauthorized_token_refresh(self, mock_request, mock_sleep):
+        token_holder = {'token': 'old_expired_token'}
+
+        def token_provider():
+            return token_holder['token']
+
+        resp_401 = MagicMock()
+        resp_401.status_code = 401
+        resp_401.text = "Unauthorized"
+
+        resp_200 = MagicMock()
+        resp_200.status_code = 200
+        resp_200.json.return_value = {'userName': 'Refreshed User'}
+
+        def side_effect(method, url, headers=None, **kwargs):
+            if headers.get('Authorization') == 'Bearer old_expired_token':
+                # Token was expired; simulate refresh happening
+                token_holder['token'] = 'fresh_token_123'
+                return resp_401
+            return resp_200
+
+        mock_request.side_effect = side_effect
+
+        client = NuHeat(token_provider)
+        account = client.get_account()
+        self.assertIsNotNone(account)
+        self.assertEqual(account['userName'], 'Refreshed User')
+        self.assertEqual(mock_request.call_count, 2)
+        mock_sleep.assert_called_once_with(0.5)
+
+    @patch('time.sleep')
+    @patch.object(requests.Session, 'request')
+    def test_retry_on_network_timeout(self, mock_request, mock_sleep):
+        resp_200 = MagicMock()
+        resp_200.status_code = 200
+        resp_200.json.return_value = {'userName': 'Recovered From Timeout'}
+
+        mock_request.side_effect = [requests.exceptions.Timeout("Read timeout"), resp_200]
+
+        client = NuHeat('dummy')
+        account = client.get_account()
+        self.assertIsNotNone(account)
+        self.assertEqual(account['userName'], 'Recovered From Timeout')
+        self.assertEqual(mock_request.call_count, 2)
+        mock_sleep.assert_called_once_with(2.0)
+
+    @patch.object(requests.Session, 'request')
+    def test_day_and_week_energy_log_caching(self, mock_request):
+        mock_resp_day = MagicMock()
+        mock_resp_day.status_code = 200
+        mock_resp_day.json.return_value = {
+            'mondayIsFirstDay': True,
+            'energyUsage': [{'entry': '0', 'minutes': 30, 'energyKWattHour': 0.5, 'chargeKWattHour': 6.0}]
+        }
+
+        mock_resp_week = MagicMock()
+        mock_resp_week.status_code = 200
+        mock_resp_week.json.return_value = {
+            'mondayIsFirstDay': True,
+            'energyUsage': [{'entry': '1', 'minutes': 60, 'energyKWattHour': 1.0, 'chargeKWattHour': 12.0}]
+        }
+
+        mock_request.side_effect = [mock_resp_day, mock_resp_day, mock_resp_week, mock_resp_week]
+
+        client = NuHeat('dummy')
+
+        # First call to day log -> network call
+        res_day_1 = client.get_energy_log_day('12345678', '2026-10-11')
+        self.assertEqual(res_day_1, [30, 0.5, 0.06])
+        self.assertEqual(mock_request.call_count, 1)
+
+        # Second call within TTL -> cached
+        res_day_2 = client.get_energy_log_day('12345678', '2026-10-11')
+        self.assertEqual(res_day_2, [30, 0.5, 0.06])
+        self.assertEqual(mock_request.call_count, 1)
+
+        # Third call with force=True -> network call
+        res_day_3 = client.get_energy_log_day('12345678', '2026-10-11', force=True)
+        self.assertEqual(res_day_3, [30, 0.5, 0.06])
+        self.assertEqual(mock_request.call_count, 2)
+
+        # First call to week log -> network call
+        res_week_1 = client.get_energy_log_week('12345678', '2026-10-11')
+        self.assertEqual(res_week_1, [60, 1.0, 0.12])
+        self.assertEqual(mock_request.call_count, 3)
+
+        # Second call within TTL -> cached
+        res_week_2 = client.get_energy_log_week('12345678', '2026-10-11')
+        self.assertEqual(res_week_2, [60, 1.0, 0.12])
+        self.assertEqual(mock_request.call_count, 3)
+
+        # Third call with force=True -> network call
+        res_week_3 = client.get_energy_log_week('12345678', '2026-10-11', force=True)
+        self.assertEqual(res_week_3, [60, 1.0, 0.12])
+        self.assertEqual(mock_request.call_count, 4)
+
+    def test_client_close(self):
+        mock_session = MagicMock()
+        client = NuHeat('dummy', session=mock_session)
+        client.close()
+        mock_session.close.assert_called_once()
 
 if __name__ == '__main__':
     unittest.main()

@@ -6,7 +6,7 @@ import threading
 
 from nodes.base import LOGGER, BaseNode, get_current_timestamp, is_uom151_supported, is_dynamic_profile_supported
 
-VERSION = "2.2.23"
+VERSION = "2.2.24"
 
 try:
     import udi_interface
@@ -326,6 +326,8 @@ class Controller(BaseNode):
                 self.poly.subscribe(self.poly.ADDNODEDONE, self.node_done)
             if hasattr(self.poly, 'DELNODEDONE'):
                 self.poly.subscribe(self.poly.DELNODEDONE, self.node_deleted)
+            if hasattr(self.poly, 'STOP') and hasattr(self, 'stop'):
+                self.poly.subscribe(self.poly.STOP, self.stop)
             self.poly.subscribe(self.poly.DISCOVER, self.discover)
 
     def node_done(self, node):
@@ -848,11 +850,25 @@ class Controller(BaseNode):
             get_nodes = getattr(self.poly, 'getNodes', None)
             nodes = get_nodes() if callable(get_nodes) else getattr(self, 'nodes', {})
             nodes_iterable = nodes.values() if isinstance(nodes, dict) else nodes
+
+            # Batch retrieve all thermostat states in a single API call
+            stats_by_serial = None
+            if hasattr(self, 'NuHeat') and self.NuHeat is not None:
+                try:
+                    all_stats = self.NuHeat.get_thermostat()
+                    if isinstance(all_stats, list):
+                        stats_by_serial = {str(s.get('serialNumber')): s for s in all_stats if isinstance(s, dict)}
+                    elif isinstance(all_stats, dict) and 'serialNumber' in all_stats:
+                        stats_by_serial = {str(all_stats.get('serialNumber')): all_stats}
+                except Exception as e:
+                    LOGGER.warning(f"Batch get_thermostat failed in shortPoll, falling back to per-node queries: {e}")
+
             any_success = False
             for node in nodes_iterable:
                 if getattr(node, 'address', None) != self.address and hasattr(node, 'update_info'):
                     try:
-                        if node.update_info():
+                        stat_data = stats_by_serial.get(str(node.address)) if stats_by_serial is not None else None
+                        if node.update_info(stat=stat_data):
                             any_success = True
                     except Exception as e:
                         LOGGER.error(f"Error in shortPoll updating node {getattr(node, 'address', '')}: {e}")
@@ -866,12 +882,26 @@ class Controller(BaseNode):
             get_nodes = getattr(self.poly, 'getNodes', None)
             nodes = get_nodes() if callable(get_nodes) else getattr(self, 'nodes', {})
             nodes_iterable = nodes.values() if isinstance(nodes, dict) else nodes
+
+            # Batch retrieve all thermostat states in a single API call for info update
+            stats_by_serial = None
+            if hasattr(self, 'NuHeat') and self.NuHeat is not None:
+                try:
+                    all_stats = self.NuHeat.get_thermostat()
+                    if isinstance(all_stats, list):
+                        stats_by_serial = {str(s.get('serialNumber')): s for s in all_stats if isinstance(s, dict)}
+                    elif isinstance(all_stats, dict) and 'serialNumber' in all_stats:
+                        stats_by_serial = {str(all_stats.get('serialNumber')): all_stats}
+                except Exception as e:
+                    LOGGER.warning(f"Batch get_thermostat failed in longPoll, falling back to per-node queries: {e}")
+
             any_success = False
             for node in nodes_iterable:
                 if getattr(node, 'address', None) != self.address:
                     if hasattr(node, 'update_info'):
                         try:
-                            if node.update_info():
+                            stat_data = stats_by_serial.get(str(node.address)) if stats_by_serial is not None else None
+                            if node.update_info(stat=stat_data):
                                 any_success = True
                         except Exception as e:
                             LOGGER.error(f"Error in longPoll updating node info {getattr(node, 'address', '')}: {e}")
@@ -1004,6 +1034,12 @@ class Controller(BaseNode):
         LOGGER.info('Forcing update across all nodes...')
         self.longPoll()
         return True
+
+    def stop(self):
+        """Clean up resources on node server stop."""
+        LOGGER.info('NuHeat plugin stopping...')
+        if hasattr(self, 'NuHeat') and hasattr(self.NuHeat, 'close'):
+            self.NuHeat.close()
 
     commands = {
         'UPDATE': update_nodes,
