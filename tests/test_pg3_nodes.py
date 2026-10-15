@@ -6,7 +6,10 @@ from datetime import datetime, timezone, timedelta
 from unittest.mock import MagicMock, patch
 from nuheat import NuHeat
 from nodes import ThermostatNode, ThermostatNode_F, ThermostatNode_C, EnergyLogDayNode, EnergyLogWeekNode, EnergyLogYearNode
-from nodes.base import get_current_timestamp, is_uom151_supported, is_dynamic_profile_supported
+from nodes.base import (
+    get_current_timestamp, is_uom151_supported, is_dynamic_profile_supported,
+    load_nls_driver_names, get_driver_names, apply_driver_names
+)
 
 controller_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'nuheat.py'))
 spec = importlib.util.spec_from_file_location("controller_module", controller_path)
@@ -411,7 +414,7 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertTrue(os.path.isfile(version_path))
         with open(version_path, 'r') as f:
             v_content = f.read().strip()
-        self.assertEqual(v_content, "2.2.24")
+        self.assertEqual(v_content, "2.2.25")
 
         # Check editors.xml
         editors_path = os.path.join(repo_dir, 'profile', 'editor', 'editors.xml')
@@ -589,6 +592,12 @@ class TestPG3Nodes(unittest.TestCase):
         gv4_f = [d for d in node_f.drivers if d['driver'] == 'GV4'][0]
         self.assertEqual(gv4_f['uom'], 45)
         self.assertNotIn('GV6', [d['driver'] for d in node_f.drivers])
+        for d in node_f.drivers:
+            self.assertIn('name', d)
+            self.assertTrue(len(d['name']) > 0)
+        for d in ThermostatNode_F.drivers:
+            self.assertIn('name', d)
+            self.assertTrue(len(d['name']) > 0)
 
         node_c = ThermostatNode_C(self.mock_poly, '445566', '445566', 'Test C')
         self.assertEqual(node_c.id, 'thermostatc')
@@ -598,6 +607,12 @@ class TestPG3Nodes(unittest.TestCase):
         gv4_c = [d for d in node_c.drivers if d['driver'] == 'GV4'][0]
         self.assertEqual(gv4_c['uom'], 45)
         self.assertNotIn('GV6', [d['driver'] for d in node_c.drivers])
+        for d in node_c.drivers:
+            self.assertIn('name', d)
+            self.assertTrue(len(d['name']) > 0)
+        for d in ThermostatNode_C.drivers:
+            self.assertIn('name', d)
+            self.assertTrue(len(d['name']) > 0)
 
     def test_controller_serial_1_by_1_node_creation(self):
         controller = Controller(self.mock_poly, 'controller', 'controller', 'NuHeat')
@@ -783,7 +798,7 @@ class TestPG3Nodes(unittest.TestCase):
     def test_build_profile_definition(self):
         # Fahrenheit profile with UOM 151
         profile_f_151 = _build_profile_definition(temp_unit="F", time_uom=151)
-        self.assertEqual(profile_f_151['version'], "2.2.24")
+        self.assertEqual(profile_f_151['version'], "2.2.25")
         editors_f = {e['id']: e for e in profile_f_151['editors']}
         self.assertIn('TEMPF', editors_f)
         self.assertIn('TEMPFINPUT', editors_f)
@@ -837,6 +852,7 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertEqual(controller.time_uom, 58)
         time_drv = [d for d in controller.drivers if d['driver'] == 'TIME'][0]
         self.assertEqual(time_drv['uom'], 58)
+        self.assertEqual(time_drv['name'], 'Time since node started')
 
         now = int(time.time())
         c_time = controller.get_current_time()
@@ -847,6 +863,7 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertEqual(node.time_uom, 58)
         stat_time_drv = [d for d in node.drivers if d['driver'] == 'TIME'][0]
         self.assertEqual(stat_time_drv['uom'], 58)
+        self.assertEqual(stat_time_drv['name'], 'Time since node started')
 
     def test_controller_force_old_fw_override(self):
         mock_poly = MagicMock()
@@ -858,18 +875,22 @@ class TestPG3Nodes(unittest.TestCase):
 
         controller = Controller(mock_poly, 'controller', 'controller', 'NuHeat')
         self.assertEqual(controller.time_uom, 151)
+        time_drv = [d for d in controller.drivers if d['driver'] == 'TIME'][0]
+        self.assertEqual(time_drv['name'], 'Last Update')
 
         # Enable forceOldFW
         controller.customParamsHandler({'forceOldFW': 'true'})
         self.assertEqual(controller.time_uom, 58)
         time_drv = [d for d in controller.drivers if d['driver'] == 'TIME'][0]
         self.assertEqual(time_drv['uom'], 58)
+        self.assertEqual(time_drv['name'], 'Time since node started')
 
         # Disable forceOldFW
         controller.customParamsHandler({'forceOldFW': 'false'})
         self.assertEqual(controller.time_uom, 151)
         time_drv = [d for d in controller.drivers if d['driver'] == 'TIME'][0]
         self.assertEqual(time_drv['uom'], 151)
+        self.assertEqual(time_drv['name'], 'Last Update')
 
     def test_controller_publish_profile(self):
         controller = Controller(self.mock_poly, 'controller', 'controller', 'NuHeat')
@@ -1024,6 +1045,65 @@ class TestPG3Nodes(unittest.TestCase):
         controller.longPoll()
         time_calls = [c for c in controller.setDriver.call_args_list if c[0][0] == 'TIME']
         self.assertEqual(len(time_calls), 1)
+
+    def test_driver_names_dynamic_and_nls(self):
+        # 1. Test NLS parser
+        nls_names = load_nls_driver_names()
+        self.assertIn('ctl', nls_names)
+        self.assertIn('tstat', nls_names)
+        self.assertEqual(nls_names['ctl'].get('ST'), 'NodeServer Online')
+        self.assertEqual(nls_names['ctl'].get('TIME'), 'Time since node started')
+        self.assertEqual(nls_names['tstat'].get('ST'), 'Current Temperature')
+        self.assertEqual(nls_names['tstat'].get('CLISPH'), 'Heat Setpoint')
+        self.assertEqual(nls_names['tstat'].get('CLIMD'), 'Mode')
+        self.assertEqual(nls_names['tstat'].get('CLIHCS'), 'Heat State')
+        self.assertEqual(nls_names['tstat'].get('GV0'), 'Daily Energy')
+        self.assertEqual(nls_names['tstat'].get('GV4'), 'Hold Time')
+        self.assertEqual(nls_names['tstat'].get('GV5'), 'Online')
+
+        # 2. Dynamic profile driver names
+        dyn_ctl = get_driver_names('controller', use_dynamic=True, time_uom=151)
+        self.assertEqual(dyn_ctl.get('ST'), 'NodeServer Online')
+        self.assertEqual(dyn_ctl.get('TIME'), 'Last Update')
+
+        dyn_tstat = get_driver_names('thermostatf', use_dynamic=True, temp_unit='F', time_uom=151)
+        self.assertEqual(dyn_tstat.get('ST'), 'Current Temperature')
+        self.assertEqual(dyn_tstat.get('CLISPH'), 'Heat Setpoint')
+        self.assertEqual(dyn_tstat.get('CLIMD'), 'Mode')
+        self.assertEqual(dyn_tstat.get('TIME'), 'Last Update')
+
+        # 3. Static/NLS fallback driver names
+        static_ctl = get_driver_names('controller', use_dynamic=False, time_uom=58)
+        self.assertEqual(static_ctl.get('ST'), 'NodeServer Online')
+        self.assertEqual(static_ctl.get('TIME'), 'Time since node started')
+
+        static_tstat = get_driver_names('thermostatf', use_dynamic=False, temp_unit='F', time_uom=58)
+        self.assertEqual(static_tstat.get('TIME'), 'Time since node started')
+
+        # 4. Verify Energy child nodes have names
+        controller = MagicMock()
+        controller.tz = 'America/New_York'
+        controller._is_dynamic_profile_supported.return_value = True
+        controller.time_uom = 151
+        day_node = EnergyLogDayNode(self.mock_poly, '99887766', 'eld99887766', 'Energy-Day', controller)
+        for d in day_node.drivers:
+            self.assertIn('name', d)
+            self.assertTrue(len(d['name']) > 0)
+        self.assertEqual([d for d in day_node.drivers if d['driver'] == 'ST'][0]['name'], 'Energy')
+        self.assertEqual([d for d in day_node.drivers if d['driver'] == 'GV0'][0]['name'], 'Duration')
+        self.assertEqual([d for d in day_node.drivers if d['driver'] == 'TIME'][0]['name'], 'Last Update')
+
+        week_node = EnergyLogWeekNode(self.mock_poly, '99887766', 'elw99887766', 'Energy-Week', controller)
+        for d in week_node.drivers:
+            self.assertIn('name', d)
+            self.assertTrue(len(d['name']) > 0)
+        self.assertEqual([d for d in week_node.drivers if d['driver'] == 'ST'][0]['name'], 'Energy')
+
+        year_node = EnergyLogYearNode(self.mock_poly, '99887766', 'ely99887766', 'Energy-Year', controller)
+        for d in year_node.drivers:
+            self.assertIn('name', d)
+            self.assertTrue(len(d['name']) > 0)
+        self.assertEqual([d for d in year_node.drivers if d['driver'] == 'ST'][0]['name'], 'Energy')
 
 
 if __name__ == '__main__':

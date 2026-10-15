@@ -2,16 +2,16 @@ import time
 from datetime import datetime
 import pytz
 
-from .base import LOGGER, BaseNode, get_current_timestamp
+from .base import LOGGER, BaseNode, get_current_timestamp, apply_driver_names
 
 
 class EnergyLogWeekNode(BaseNode):
     id = 'ENERGYLOG'
 
     drivers = [
-        {'driver': 'GV0', 'value': 0, 'uom': 45},
-        {'driver': 'ST', 'value': 0, 'uom': 33},
-        {'driver': 'TIME', 'value': 0, 'uom': 151}
+        {'driver': 'GV0', 'value': 0, 'uom': 45, 'name': 'Duration'},
+        {'driver': 'ST', 'value': 0, 'uom': 33, 'name': 'Energy'},
+        {'driver': 'TIME', 'value': 0, 'uom': 151, 'name': 'Last Update'}
     ]
 
     def __init__(self, polyglot, primary, address, name, controller=None):
@@ -22,6 +22,16 @@ class EnergyLogWeekNode(BaseNode):
         self.controller = controller
         self.stat_address = address[3:] if address.startswith('elw') else primary
         self.start_time = int(time.time())
+        time_uom = 151
+        if self.controller and hasattr(self.controller, 'time_uom'):
+            try:
+                time_uom = int(self.controller.time_uom)
+            except (ValueError, TypeError):
+                time_uom = 151
+        use_dyn = None
+        if self.controller and hasattr(self.controller, '_is_dynamic_profile_supported'):
+            use_dyn = self.controller._is_dynamic_profile_supported()
+        apply_driver_names(self, use_dynamic=use_dyn, time_uom=time_uom)
 
     def start(self):
         if not hasattr(self, 'start_time') or self.start_time is None:

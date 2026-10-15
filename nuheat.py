@@ -4,9 +4,9 @@ import time
 import requests
 import threading
 
-from nodes.base import LOGGER, BaseNode, get_current_timestamp, is_uom151_supported, is_dynamic_profile_supported
+from nodes.base import LOGGER, BaseNode, get_current_timestamp, is_uom151_supported, is_dynamic_profile_supported, apply_driver_names, register_profile_builder
 
-VERSION = "2.2.24"
+VERSION = "2.2.25"
 
 try:
     import udi_interface
@@ -251,11 +251,14 @@ def _build_profile_definition(temp_unit: str = "F", time_uom: int = 151) -> dict
         "linkdefs": [],
     }
 
+register_profile_builder(_build_profile_definition)
+
+
 class Controller(BaseNode):
     id = 'controller'
     drivers = [
-        {'driver': 'ST', 'value': 1, 'uom': 2},
-        {'driver': 'TIME', 'value': 0, 'uom': 151}
+        {'driver': 'ST', 'value': 1, 'uom': 2, 'name': 'NodeServer Online'},
+        {'driver': 'TIME', 'value': 0, 'uom': 151, 'name': 'Last Update'}
     ]
 
     def __init__(self, polyglot, primary='controller', address='controller', name='NuHeat'):
@@ -282,9 +285,7 @@ class Controller(BaseNode):
         self.temp_unit = "F"
         self.temp_uom = 17
         self.time_uom = self._determine_time_uom()
-        for drv in self.drivers:
-            if isinstance(drv, dict) and drv.get('driver') == 'TIME':
-                drv['uom'] = self.time_uom
+        apply_driver_names(self, use_dynamic=self._is_dynamic_profile_supported(), time_uom=self.time_uom, temp_unit=self.temp_unit)
         self.tz = "America/New_York"
         self.disco = 0
         self.start_time = int(time.time())
@@ -461,9 +462,7 @@ class Controller(BaseNode):
     def _publish_profile(self, wait_response: bool = False) -> None:
         """Publish dynamic JSON profile if supported (Approach A), or fall back to static profile files."""
         self.time_uom = self._determine_time_uom()
-        for drv in self.drivers:
-            if isinstance(drv, dict) and drv.get('driver') == 'TIME':
-                drv['uom'] = self.time_uom
+        apply_driver_names(self, use_dynamic=self._is_dynamic_profile_supported(), time_uom=self.time_uom, temp_unit=self.temp_unit)
 
         # 1. Firmware Check: If ISY firmware is old (< 5.8.0) or forceOldFW is enabled,
         # skip dynamic JSON profile generation and updateJsonProfile entirely,
@@ -758,11 +757,9 @@ class Controller(BaseNode):
 
         prev_time_uom = self.time_uom
         self.time_uom = self._determine_time_uom()
+        apply_driver_names(self, use_dynamic=self._is_dynamic_profile_supported(), time_uom=self.time_uom, temp_unit=self.temp_unit)
         if self.time_uom != prev_time_uom:
             LOGGER.info(f"Time UOM changed from {prev_time_uom} to {self.time_uom}")
-            for drv in self.drivers:
-                if isinstance(drv, dict) and drv.get('driver') == 'TIME':
-                    drv['uom'] = self.time_uom
             self.setDriver('TIME', self.get_current_time(), uom=self.time_uom)
             self.update_profile()
             get_nodes = getattr(self.poly, 'getNodes', None)
@@ -771,9 +768,7 @@ class Controller(BaseNode):
             for node in nodes_iterable:
                 if hasattr(node, 'time_uom'):
                     node.time_uom = self.time_uom
-                    for drv in getattr(node, 'drivers', []):
-                        if isinstance(drv, dict) and drv.get('driver') == 'TIME':
-                            drv['uom'] = self.time_uom
+                    apply_driver_names(node, use_dynamic=self._is_dynamic_profile_supported(), time_uom=self.time_uom, temp_unit=getattr(node, 'temp_unit', self.temp_unit))
                     if hasattr(node, 'setDriver'):
                         node_time = getattr(node, 'get_current_time', lambda: get_current_timestamp(self.time_uom, getattr(node, 'start_time', None)))()
                         node.setDriver('TIME', node_time, uom=self.time_uom)
@@ -800,9 +795,7 @@ class Controller(BaseNode):
             wait_seconds += 1
 
         self.time_uom = self._determine_time_uom()
-        for drv in self.drivers:
-            if isinstance(drv, dict) and drv.get('driver') == 'TIME':
-                drv['uom'] = self.time_uom
+        apply_driver_names(self, use_dynamic=self._is_dynamic_profile_supported(), time_uom=self.time_uom, temp_unit=self.temp_unit)
         self.setDriver('ST', 1, uom=2)
         self.update_profile()
 

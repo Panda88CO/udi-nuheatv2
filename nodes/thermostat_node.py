@@ -2,7 +2,7 @@ import time
 from datetime import datetime, timezone, timedelta
 import pytz
 
-from .base import LOGGER, BaseNode, get_current_timestamp, is_uom151_supported
+from .base import LOGGER, BaseNode, get_current_timestamp, is_uom151_supported, apply_driver_names
 
 
 def _get_param(command, param_name, default=None):
@@ -58,17 +58,17 @@ class ThermostatNode(BaseNode):
     id = 'thermostatf'
 
     drivers = [
-        {'driver': 'ST', 'value': 0, 'uom': 17},
-        {'driver': 'CLISPH', 'value': 0, 'uom': 17},
-        {'driver': 'CLIMD', 'value': 1, 'uom': 25},
-        {'driver': 'CLIHCS', 'value': 0, 'uom': 25},
-        {'driver': 'GV0', 'value': 0, 'uom': 33},
-        {'driver': 'GV1', 'value': 0, 'uom': 33},
-        {'driver': 'GV2', 'value': 0, 'uom': 33},
-        {'driver': 'GV3', 'value': 0, 'uom': 33},
-        {'driver': 'GV4', 'value': 0, 'uom': 45},
-        {'driver': 'GV5', 'value': 1, 'uom': 2},
-        {'driver': 'TIME', 'value': 0, 'uom': 151}
+        {'driver': 'ST', 'value': 0, 'uom': 17, 'name': 'Current Temperature'},
+        {'driver': 'CLISPH', 'value': 0, 'uom': 17, 'name': 'Heat Setpoint'},
+        {'driver': 'CLIMD', 'value': 1, 'uom': 25, 'name': 'Mode'},
+        {'driver': 'CLIHCS', 'value': 0, 'uom': 25, 'name': 'Heat State'},
+        {'driver': 'GV0', 'value': 0, 'uom': 33, 'name': 'Daily Energy'},
+        {'driver': 'GV1', 'value': 0, 'uom': 33, 'name': 'Last 7 Days Energy'},
+        {'driver': 'GV2', 'value': 0, 'uom': 33, 'name': 'Monthly Energy'},
+        {'driver': 'GV3', 'value': 0, 'uom': 33, 'name': 'Yearly Energy'},
+        {'driver': 'GV4', 'value': 0, 'uom': 45, 'name': 'Hold Time'},
+        {'driver': 'GV5', 'value': 1, 'uom': 2, 'name': 'Online'},
+        {'driver': 'TIME', 'value': 0, 'uom': 151, 'name': 'Last Update'}
     ]
 
     def __init__(self, polyglot, primary, address, name, controller=None, temp_uom=None, time_uom=None):
@@ -116,22 +116,27 @@ class ThermostatNode(BaseNode):
         if self.temp_uom == 4 and getattr(self, 'id', None) in ('thermostatf', 'thermostat_f', 'THERMOSTAT_F', 'thermostatF'):
             self.id = 'thermostatc'
             self.drivers = [
-                {'driver': 'ST', 'value': 0, 'uom': 4},
-                {'driver': 'CLISPH', 'value': 0, 'uom': 4},
-                {'driver': 'CLIMD', 'value': 1, 'uom': 25},
-                {'driver': 'CLIHCS', 'value': 0, 'uom': 25},
-                {'driver': 'GV0', 'value': 0, 'uom': 33},
-                {'driver': 'GV1', 'value': 0, 'uom': 33},
-                {'driver': 'GV2', 'value': 0, 'uom': 33},
-                {'driver': 'GV3', 'value': 0, 'uom': 33},
-                {'driver': 'GV4', 'value': 0, 'uom': 45},
-                {'driver': 'GV5', 'value': 1, 'uom': 2},
-                {'driver': 'TIME', 'value': 0, 'uom': self.time_uom}
+                {'driver': 'ST', 'value': 0, 'uom': 4, 'name': 'Current Temperature'},
+                {'driver': 'CLISPH', 'value': 0, 'uom': 4, 'name': 'Heat Setpoint'},
+                {'driver': 'CLIMD', 'value': 1, 'uom': 25, 'name': 'Mode'},
+                {'driver': 'CLIHCS', 'value': 0, 'uom': 25, 'name': 'Heat State'},
+                {'driver': 'GV0', 'value': 0, 'uom': 33, 'name': 'Daily Energy'},
+                {'driver': 'GV1', 'value': 0, 'uom': 33, 'name': 'Last 7 Days Energy'},
+                {'driver': 'GV2', 'value': 0, 'uom': 33, 'name': 'Monthly Energy'},
+                {'driver': 'GV3', 'value': 0, 'uom': 33, 'name': 'Yearly Energy'},
+                {'driver': 'GV4', 'value': 0, 'uom': 45, 'name': 'Hold Time'},
+                {'driver': 'GV5', 'value': 1, 'uom': 2, 'name': 'Online'},
+                {'driver': 'TIME', 'value': 0, 'uom': self.time_uom, 'name': 'Last Update' if self.time_uom == 151 else 'Time since node started'}
             ]
         else:
             for drv in self.drivers:
                 if isinstance(drv, dict) and drv.get('driver') == 'TIME':
                     drv['uom'] = self.time_uom
+
+        use_dyn = None
+        if self.controller and hasattr(self.controller, '_is_dynamic_profile_supported'):
+            use_dyn = self.controller._is_dynamic_profile_supported()
+        apply_driver_names(self, use_dynamic=use_dyn, time_uom=self.time_uom, temp_unit="C" if self.temp_uom == 4 else "F")
 
     def get_current_time(self) -> int:
         """Return the current timestamp formatted for the target time_uom."""
@@ -444,17 +449,17 @@ class ThermostatNode(BaseNode):
 class ThermostatNode_F(ThermostatNode):
     id = 'thermostatf'
     drivers = [
-        {'driver': 'ST', 'value': 0, 'uom': 17},
-        {'driver': 'CLISPH', 'value': 0, 'uom': 17},
-        {'driver': 'CLIMD', 'value': 1, 'uom': 25},
-        {'driver': 'CLIHCS', 'value': 0, 'uom': 25},
-        {'driver': 'GV0', 'value': 0, 'uom': 33},
-        {'driver': 'GV1', 'value': 0, 'uom': 33},
-        {'driver': 'GV2', 'value': 0, 'uom': 33},
-        {'driver': 'GV3', 'value': 0, 'uom': 33},
-        {'driver': 'GV4', 'value': 0, 'uom': 45},
-        {'driver': 'GV5', 'value': 1, 'uom': 2},
-        {'driver': 'TIME', 'value': 0, 'uom': 151}
+        {'driver': 'ST', 'value': 0, 'uom': 17, 'name': 'Current Temperature'},
+        {'driver': 'CLISPH', 'value': 0, 'uom': 17, 'name': 'Heat Setpoint'},
+        {'driver': 'CLIMD', 'value': 1, 'uom': 25, 'name': 'Mode'},
+        {'driver': 'CLIHCS', 'value': 0, 'uom': 25, 'name': 'Heat State'},
+        {'driver': 'GV0', 'value': 0, 'uom': 33, 'name': 'Daily Energy'},
+        {'driver': 'GV1', 'value': 0, 'uom': 33, 'name': 'Last 7 Days Energy'},
+        {'driver': 'GV2', 'value': 0, 'uom': 33, 'name': 'Monthly Energy'},
+        {'driver': 'GV3', 'value': 0, 'uom': 33, 'name': 'Yearly Energy'},
+        {'driver': 'GV4', 'value': 0, 'uom': 45, 'name': 'Hold Time'},
+        {'driver': 'GV5', 'value': 1, 'uom': 2, 'name': 'Online'},
+        {'driver': 'TIME', 'value': 0, 'uom': 151, 'name': 'Last Update'}
     ]
 
     def __init__(self, polyglot, primary, address, name, controller=None, temp_uom=17, time_uom=None):
@@ -464,17 +469,17 @@ class ThermostatNode_F(ThermostatNode):
 class ThermostatNode_C(ThermostatNode):
     id = 'thermostatc'
     drivers = [
-        {'driver': 'ST', 'value': 0, 'uom': 4},
-        {'driver': 'CLISPH', 'value': 0, 'uom': 4},
-        {'driver': 'CLIMD', 'value': 1, 'uom': 25},
-        {'driver': 'CLIHCS', 'value': 0, 'uom': 25},
-        {'driver': 'GV0', 'value': 0, 'uom': 33},
-        {'driver': 'GV1', 'value': 0, 'uom': 33},
-        {'driver': 'GV2', 'value': 0, 'uom': 33},
-        {'driver': 'GV3', 'value': 0, 'uom': 33},
-        {'driver': 'GV4', 'value': 0, 'uom': 45},
-        {'driver': 'GV5', 'value': 1, 'uom': 2},
-        {'driver': 'TIME', 'value': 0, 'uom': 151}
+        {'driver': 'ST', 'value': 0, 'uom': 4, 'name': 'Current Temperature'},
+        {'driver': 'CLISPH', 'value': 0, 'uom': 4, 'name': 'Heat Setpoint'},
+        {'driver': 'CLIMD', 'value': 1, 'uom': 25, 'name': 'Mode'},
+        {'driver': 'CLIHCS', 'value': 0, 'uom': 25, 'name': 'Heat State'},
+        {'driver': 'GV0', 'value': 0, 'uom': 33, 'name': 'Daily Energy'},
+        {'driver': 'GV1', 'value': 0, 'uom': 33, 'name': 'Last 7 Days Energy'},
+        {'driver': 'GV2', 'value': 0, 'uom': 33, 'name': 'Monthly Energy'},
+        {'driver': 'GV3', 'value': 0, 'uom': 33, 'name': 'Yearly Energy'},
+        {'driver': 'GV4', 'value': 0, 'uom': 45, 'name': 'Hold Time'},
+        {'driver': 'GV5', 'value': 1, 'uom': 2, 'name': 'Online'},
+        {'driver': 'TIME', 'value': 0, 'uom': 151, 'name': 'Last Update'}
     ]
 
     def __init__(self, polyglot, primary, address, name, controller=None, temp_uom=4, time_uom=None):
