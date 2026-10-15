@@ -397,6 +397,25 @@ class TestNuHeatClient(unittest.TestCase):
 
     @patch('time.sleep')
     @patch.object(requests.Session, 'request')
+    def test_retry_on_401_stops_when_token_refresh_fails(self, mock_request, mock_sleep):
+        resp_401 = MagicMock()
+        resp_401.status_code = 401
+        resp_401.text = "Unauthorized"
+        mock_request.return_value = resp_401
+
+        def token_provider(force_refresh=False):
+            if force_refresh:
+                return None
+            return 'expired_token'
+
+        client = NuHeat(token_provider)
+        account = client.get_account()
+        self.assertIsNone(account)
+        # Verify it stopped immediately after detecting refresh failure, without 2 extra retries
+        self.assertEqual(mock_request.call_count, 1)
+
+    @patch('time.sleep')
+    @patch.object(requests.Session, 'request')
     def test_retry_on_network_timeout(self, mock_request, mock_sleep):
         resp_200 = MagicMock()
         resp_200.status_code = 200

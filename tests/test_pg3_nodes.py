@@ -103,6 +103,35 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertEqual(override.get('auth_endpoint'), 'https://identity.mynuheat.com/connect/authorize')
         self.assertEqual(override.get('token_endpoint'), 'https://identity.mynuheat.com/connect/token')
         self.assertEqual(override.get('name'), 'Nuheat')
+        self.assertFalse(override.get('addRedirect'))
+        self.assertFalse(override.get('addScope'))
+
+    def test_controller_token_refresh_and_expired_token_handling(self):
+        controller = Controller(self.mock_poly, 'controller', 'controller', 'NuHeat')
+        controller.oauth._oAuthTokensRefresh = MagicMock()
+
+        # 1. Force refresh triggers _oAuthTokensRefresh
+        controller.oauth.getAccessToken = MagicMock(return_value='valid_token')
+        controller.oauth._oauthTokens = {'expiry': (datetime.now() + timedelta(hours=1)).isoformat()}
+        tok = controller.get_access_token(force_refresh=True)
+        self.assertEqual(tok, 'valid_token')
+        controller.oauth._oAuthTokensRefresh.assert_called_once()
+        self.assertNotIn('auth', controller.Notices)
+
+        # 2. Expired token where refresh failed -> sets auth notice and returns None
+        controller.oauth._oauthTokens = {'expiry': '2026-10-14T15:27:43.044896'}
+        controller.oauth.getAccessToken = MagicMock(return_value='old_expired_token')
+        tok = controller.get_access_token()
+        self.assertIsNone(tok)
+        self.assertIn('auth', controller.Notices)
+        self.assertIn("Authenticate", controller.Notices['auth'])
+
+        # 3. Successful re-authentication clears auth notice
+        controller.oauth._oauthTokens = {'expiry': (datetime.now() + timedelta(hours=1)).isoformat()}
+        controller.oauth.getAccessToken = MagicMock(return_value='new_fresh_token')
+        tok = controller.get_access_token()
+        self.assertEqual(tok, 'new_fresh_token')
+        self.assertNotIn('auth', controller.Notices)
 
     def test_controller_custom_ns_handler_empty_oauth_avoids_spurious_errors(self):
         controller = Controller(self.mock_poly, 'controller', 'controller', 'NuHeat')

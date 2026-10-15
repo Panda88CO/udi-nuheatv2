@@ -34,16 +34,25 @@ class NuHeat:
             except Exception:
                 pass
 
+    def get_token(self, force_refresh: bool = False):
+        """Retrieve token from provider, optionally forcing a refresh attempt on 401."""
+        if callable(self._token_provider):
+            try:
+                return self._token_provider(force_refresh=force_refresh)
+            except TypeError:
+                return self._token_provider()
+        return str(self._token_provider) if self._token_provider else ""
+
     @property
     def headers(self):
-        token = self._token_provider()
+        token = self.get_token()
         headers = {'Content-Type': 'application/json'}
         if token:
             headers['Authorization'] = f'Bearer {token}'
         return headers
 
     def set_access_token(self, token):
-        self._token_provider = lambda: str(token) if token else ""
+        self._token_provider = lambda **kwargs: str(token) if token else ""
 
     def _request(self, method: str, url: str, max_retries: int = 2, backoff: float = 2.0, **kwargs):
         """
@@ -87,9 +96,13 @@ class NuHeat:
                 if r.status_code == 401 and attempt < max_retries:
                     LOGGER.warning(
                         f"NuHeat API [{method}] {url} returned 401 Unauthorized. "
-                        f"Retrying with fresh token (attempt {attempt + 1}/{max_retries})..."
+                        f"Attempting token refresh (attempt {attempt + 1}/{max_retries})..."
                     )
                     time.sleep(0.5)
+                    fresh_token = self.get_token(force_refresh=True)
+                    if not fresh_token:
+                        LOGGER.error(f"NuHeat API [{method}] {url}: Token refresh failed or re-authentication required.")
+                        return r
                     continue
 
                 # Server Errors (5xx)
