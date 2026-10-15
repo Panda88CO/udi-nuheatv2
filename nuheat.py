@@ -7,7 +7,7 @@ from datetime import datetime
 
 from nodes.base import LOGGER, BaseNode, get_current_timestamp, is_uom151_supported, is_dynamic_profile_supported, apply_driver_names, register_profile_builder
 
-VERSION = "2.2.25"
+VERSION = "2.2.26"
 
 try:
     import udi_interface
