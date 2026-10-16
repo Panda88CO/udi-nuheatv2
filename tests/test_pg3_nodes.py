@@ -827,7 +827,7 @@ class TestPG3Nodes(unittest.TestCase):
     def test_build_profile_definition(self):
         # Fahrenheit profile with UOM 151
         profile_f_151 = _build_profile_definition(temp_unit="F", time_uom=151)
-        self.assertEqual(profile_f_151['version'], "2.2.26")
+        self.assertEqual(profile_f_151['version'], "2.2.27")
         editors_f = {e['id']: e for e in profile_f_151['editors']}
         self.assertIn('TEMPF', editors_f)
         self.assertIn('TEMPFINPUT', editors_f)
