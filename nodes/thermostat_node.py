@@ -115,23 +115,28 @@ class ThermostatNode(BaseNode):
 
         if self.temp_uom == 4 and getattr(self, 'id', None) in ('thermostatf', 'thermostat_f', 'THERMOSTAT_F', 'thermostatF'):
             self.id = 'thermostatc'
-            self.drivers = [
-                {'driver': 'ST', 'value': 0, 'uom': 4, 'name': 'Current Temperature'},
-                {'driver': 'CLISPH', 'value': 0, 'uom': 4, 'name': 'Heat Setpoint'},
-                {'driver': 'CLIMD', 'value': 1, 'uom': 25, 'name': 'Mode'},
-                {'driver': 'CLIHCS', 'value': 0, 'uom': 25, 'name': 'Heat State'},
-                {'driver': 'GV0', 'value': 0, 'uom': 33, 'name': 'Daily Energy'},
-                {'driver': 'GV1', 'value': 0, 'uom': 33, 'name': 'Last 7 Days Energy'},
-                {'driver': 'GV2', 'value': 0, 'uom': 33, 'name': 'Monthly Energy'},
-                {'driver': 'GV3', 'value': 0, 'uom': 33, 'name': 'Yearly Energy'},
-                {'driver': 'GV4', 'value': 0, 'uom': 45, 'name': 'Hold Time'},
-                {'driver': 'GV5', 'value': 1, 'uom': 2, 'name': 'Online'},
-                {'driver': 'TIME', 'value': 0, 'uom': self.time_uom, 'name': 'Last Update' if self.time_uom == 151 else 'Time since node started'}
-            ]
-        else:
-            for drv in self.drivers:
-                if isinstance(drv, dict) and drv.get('driver') == 'TIME':
-                    drv['uom'] = self.time_uom
+        elif self.temp_uom == 17 and getattr(self, 'id', None) in ('thermostatc', 'thermostat_c', 'THERMOSTAT_C', 'thermostatC'):
+            self.id = 'thermostatf'
+
+        expected_uoms = {
+            'ST': self.temp_uom,
+            'CLISPH': self.temp_uom,
+            'CLIMD': 25,
+            'CLIHCS': 25,
+            'GV0': 33,
+            'GV1': 33,
+            'GV2': 33,
+            'GV3': 33,
+            'GV4': 45,
+            'GV5': 2,
+            'TIME': self.time_uom,
+        }
+        self.drivers = [dict(d) for d in self.drivers]
+        for drv in self.drivers:
+            if isinstance(drv, dict) and 'driver' in drv:
+                d_id = drv['driver']
+                if d_id in expected_uoms:
+                    drv['uom'] = expected_uoms[d_id]
 
         use_dyn = None
         if self.controller and hasattr(self.controller, '_is_dynamic_profile_supported'):

@@ -18,11 +18,54 @@ def is_uom151_supported(poly) -> bool:
     """Check if ISY/IoX firmware supports UOM 151 (IoX 5.8.0+)."""
     if poly is not None:
         custom_params = getattr(poly, 'customParams', None) or getattr(poly, 'customparams', None)
-        if custom_params:
-            for k in ('forceOldFW', 'forceoldfw', 'FORCEOLDFW', 'force_old_fw', 'FORCE_OLD_FW'):
-                val = custom_params.get(k) if hasattr(custom_params, 'get') else getattr(custom_params, k, None)
+        if custom_params is not None:
+            force_keys = (
+                'forceOldFW', 'forceoldfw', 'FORCEOLDFW', 'force_old_fw', 'FORCE_OLD_FW',
+                'force_uom58', 'force_uom_58', 'FORCE_UOM58', 'force58',
+                'force_uom137', 'force_uom_137', 'FORCE_UOM137', 'force137'
+            )
+            for k in force_keys:
+                val = None
+                if hasattr(custom_params, 'get'):
+                    try:
+                        val = custom_params.get(k)
+                    except Exception:
+                        pass
+                if val is None and hasattr(custom_params, '__contains__') and k in custom_params:
+                    try:
+                        val = custom_params[k]
+                    except Exception:
+                        pass
+                if val is None:
+                    val = getattr(custom_params, k, None)
                 if val and str(val).strip().lower() in ('true', '1', 'yes', 'on'):
                     return False
+
+            for k in ('time_uom', 'TIME_UOM', 'timeUom'):
+                val = None
+                if hasattr(custom_params, 'get'):
+                    try:
+                        val = custom_params.get(k)
+                    except Exception:
+                        pass
+                if val is None and hasattr(custom_params, '__contains__') and k in custom_params:
+                    try:
+                        val = custom_params[k]
+                    except Exception:
+                        pass
+                if val and str(val).strip() in ('58', '137'):
+                    return False
+
+            rawdata = getattr(custom_params, '_rawdata', None)
+            if isinstance(rawdata, dict):
+                for k, v in rawdata.items():
+                    kl = str(k).lower()
+                    if kl in ('forceoldfw', 'force_old_fw', 'force_uom58', 'force_uom_58', 'force58',
+                              'force_uom137', 'force_uom_137', 'force137') and v:
+                        if str(v).strip().lower() in ('true', '1', 'yes', 'on'):
+                            return False
+                    if kl in ('time_uom', 'timeuom') and v and str(v).strip() in ('58', '137'):
+                        return False
 
     isy_ver = None
     if poly is not None:

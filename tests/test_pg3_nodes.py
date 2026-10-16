@@ -1134,6 +1134,220 @@ class TestPG3Nodes(unittest.TestCase):
             self.assertTrue(len(d['name']) > 0)
         self.assertEqual([d for d in year_node.drivers if d['driver'] == 'ST'][0]['name'], 'Energy')
 
+    def test_clean_install_older_fw_5_3_4_fahrenheit_and_celsius(self):
+        """Verify clean install on older ISY firmware (< 5.8.0, e.g. 5.3.4) creates controller and thermostat nodes properly."""
+        for scale, expected_node_id, expected_temp_uom in [('Fahrenheit', 'thermostatf', 17), ('Celsius', 'thermostatc', 4)]:
+            with self.subTest(scale=scale):
+                mock_poly = MagicMock()
+                mock_poly.pg3init = {'isyVersion': '5.3.4'}
+                mock_poly._nodes = {}
+                mock_poly.getNodes.return_value = {}
+                mock_poly.getNode.return_value = None
+                mock_poly.getValidAddress.side_effect = lambda a: str(a)
+                mock_poly.getValidName.side_effect = lambda n: str(n)
+
+                added_nodes = []
+                controller = None
+
+                def fake_add_node(node, *args, **kwargs):
+                    added_nodes.append(node)
+                    # Simulate PG3 storing node in _nodes and confirming ADDNODEDONE
+                    mock_poly._nodes[node.address] = {
+                        'address': node.address,
+                        'nodeDefId': node.id,
+                        'primaryNode': node.primary,
+                        'name': node.name,
+                        'drivers': [dict(d) for d in node.drivers],
+                    }
+                    if controller is not None and hasattr(controller, 'node_done'):
+                        controller.node_done({'address': node.address})
+                    return node
+
+                mock_poly.addNode.side_effect = fake_add_node
+
+                controller = Controller(mock_poly, 'controller', 'controller', 'NuHeat')
+                self.assertEqual(controller.time_uom, 58)
+                self.assertFalse(controller._is_dynamic_profile_supported())
+
+                # Verify Controller node was added on init with UOM 58 and NLS name
+                self.assertEqual(len(added_nodes), 1)
+                ctl_node = added_nodes[0]
+                self.assertEqual(ctl_node.id, 'controller')
+                ctl_drvs = {d['driver']: d for d in ctl_node.drivers}
+                self.assertEqual(ctl_drvs['ST']['uom'], 2)
+                self.assertEqual(ctl_drvs['ST']['name'], 'NodeServer Online')
+                self.assertEqual(ctl_drvs['TIME']['uom'], 58)
+                self.assertEqual(ctl_drvs['TIME']['name'], 'Time since node started')
+
+                # Simulate clean install PG3 startup sequence: empty customNs ('')
+                controller.oauth.customNsHandler = MagicMock()
+                controller.customNsHandler('oauth', '')
+                controller.customNsHandler('oauthTokens', '')
+                # Empty oauthTokens on clean install must not call oauth.customNsHandler('oauthTokens', {})
+                oauth_token_calls = [
+                    c for c in controller.oauth.customNsHandler.call_args_list if c[0][0] == 'oauthTokens'
+                ]
+                self.assertEqual(len(oauth_token_calls), 0)
+
+                # User configures clientId and clientSecret in Custom Configuration Parameters
+                controller.customParamsHandler({'clientId': 'test_id', 'clientSecret': 'test_secret'})
+                controller.configDoneHandler()
+
+                # Before OAuth authentication, start() runs
+                controller.get_access_token = MagicMock(return_value=None)
+                controller.start()
+                mock_poly.updateJsonProfile.assert_not_called()
+                self.assertGreaterEqual(mock_poly.updateProfile.call_count, 1)
+
+                # Now user clicks Authenticate in PG3 -> oauthHandler receives authorization code
+                controller.oauth.oauthHandler = MagicMock()
+                controller.get_access_token = MagicMock(return_value='valid_access_token')
+                controller.NuHeat.get_account = MagicMock(return_value={'temperatureScale': scale})
+                controller.NuHeat.get_thermostat = MagicMock(return_value=[{
+                    'serialNumber': '99887766',
+                    'name': 'Master Bath',
+                    'currentTemperature': 2100,
+                    'setPointTemperature': 2200,
+                    'isHeating': True,
+                    'mode': 1,
+                    'online': True,
+                }])
+                controller.NuHeat.get_energy_log_day = MagicMock(return_value=[60, 1.25, 0.20])
+                controller.NuHeat.get_energy_log_week = MagicMock(return_value=[420, 8.50, 1.40])
+                controller.NuHeat.get_energy_log_month = MagicMock(return_value=[1800, 35.0, 5.50])
+                controller.NuHeat.get_energy_log_year = MagicMock(return_value=[12000, 240.0, 38.0])
+
+                controller.oauthHandler({'code': 'auth_code_123'})
+
+                # Verify thermostat node was created with expected nodeDefId, primary, and driver UOMs/names
+                self.assertEqual(controller.disco, 1)
+                self.assertEqual(len(added_nodes), 2)
+                tstat_node = added_nodes[1]
+                self.assertEqual(tstat_node.address, '99887766')
+                self.assertEqual(tstat_node.primary, '99887766')
+                self.assertEqual(tstat_node.id, expected_node_id)
+                self.assertEqual(tstat_node.temp_uom, expected_temp_uom)
+                self.assertEqual(tstat_node.time_uom, 58)
+
+                tstat_drvs = {d['driver']: d for d in tstat_node.drivers}
+                expected_uoms = {
+                    'ST': expected_temp_uom,
+                    'CLISPH': expected_temp_uom,
+                    'CLIMD': 25,
+                    'CLIHCS': 25,
+                    'GV0': 33,
+                    'GV1': 33,
+                    'GV2': 33,
+                    'GV3': 33,
+                    'GV4': 45,
+                    'GV5': 2,
+                    'TIME': 58,
+                }
+                for drv_id, exp_uom in expected_uoms.items():
+                    self.assertIn(drv_id, tstat_drvs)
+                    self.assertEqual(tstat_drvs[drv_id]['uom'], exp_uom, f"Mismatch UOM on {drv_id} for {scale}")
+                self.assertEqual(tstat_drvs['TIME']['name'], 'Time since node started')
+                mock_poly.updateJsonProfile.assert_not_called()
+
+    def test_clean_install_force_old_fw_restores_static_profile_and_recreates_nodes(self):
+        """Verify switching to forceOldFW=true after initial boot restores static profile files and recreates nodes with UOM 58."""
+        import tempfile
+        import shutil
+        _ensure_static_profile_files = controller_module._ensure_static_profile_files
+
+        # 1. Verify _ensure_static_profile_files restores overwritten profile files in a temp directory
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            os.makedirs(os.path.join(tmp_dir, 'editor'), exist_ok=True)
+            os.makedirs(os.path.join(tmp_dir, 'nodedef'), exist_ok=True)
+            os.makedirs(os.path.join(tmp_dir, 'nls'), exist_ok=True)
+            # Simulate PG3x updateJsonProfile having overwritten editors.xml with uom="151"
+            with open(os.path.join(tmp_dir, 'editor', 'editors.xml'), 'w', encoding='utf-8') as f:
+                f.write('<editors><editor id="TIMESTAMP"><range uom="151" min="0" max="2147483647" prec="0" /></editor></editors>')
+            _ensure_static_profile_files(profile_dir=tmp_dir)
+            with open(os.path.join(tmp_dir, 'editor', 'editors.xml'), 'r', encoding='utf-8') as f:
+                restored_editors = f.read()
+            self.assertIn('uom="58"', restored_editors)
+            self.assertNotIn('uom="151"', restored_editors)
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
+        # 2. Simulate initial boot on modern IoX 6.1.2 (time_uom=151), followed by user setting forceOldFW='true'
+        mock_poly = MagicMock()
+        mock_poly.pg3init = {'isyVersion': '6.1.2'}
+        mock_poly._nodes = {}
+        mock_poly.getNodes.return_value = {}
+        mock_poly.getNode.return_value = None
+        mock_poly.getValidAddress.side_effect = lambda a: str(a)
+        mock_poly.getValidName.side_effect = lambda n: str(n)
+
+        added_nodes = []
+        deleted_addresses = []
+        controller = None
+
+        def fake_add_node(node, *args, **kwargs):
+            added_nodes.append(node)
+            mock_poly._nodes[node.address] = {
+                'address': node.address,
+                'nodeDefId': node.id,
+                'primaryNode': node.primary,
+                'name': node.name,
+                'drivers': [dict(d) for d in node.drivers],
+            }
+            if controller is not None and hasattr(controller, 'node_done'):
+                controller.node_done({'address': node.address})
+            return node
+
+        def fake_del_node(addr):
+            deleted_addresses.append(addr)
+            if controller is not None and hasattr(controller, 'node_deleted'):
+                controller.node_deleted({'address': addr})
+
+        mock_poly.addNode.side_effect = fake_add_node
+        mock_poly.delNode.side_effect = fake_del_node
+
+        controller = Controller(mock_poly, 'controller', 'controller', 'NuHeat')
+        self.assertEqual(controller.time_uom, 151)
+
+        controller.get_access_token = MagicMock(return_value='valid_token')
+        controller.NuHeat.get_account = MagicMock(return_value={'temperatureScale': 'Fahrenheit'})
+        controller.NuHeat.get_thermostat = MagicMock(return_value=[{
+            'serialNumber': '99887766',
+            'name': 'Kitchen',
+            'currentTemperature': 2100,
+            'setPointTemperature': 2200,
+            'isHeating': False,
+            'mode': 1,
+            'online': True,
+        }])
+        controller.NuHeat.get_energy_log_day = MagicMock(return_value=[60, 1.0, 0.15])
+        controller.NuHeat.get_energy_log_week = MagicMock(return_value=[420, 7.0, 1.05])
+        controller.NuHeat.get_energy_log_month = MagicMock(return_value=[1800, 30.0, 4.50])
+        controller.NuHeat.get_energy_log_year = MagicMock(return_value=[12000, 200.0, 30.0])
+
+        # Initial discovery on modern FW (time_uom=151)
+        controller.discover()
+        self.assertEqual(len(added_nodes), 2)
+        first_tstat = added_nodes[-1]
+        self.assertEqual(first_tstat.time_uom, 151)
+        self.assertEqual({d['driver']: d for d in first_tstat.drivers}['TIME']['uom'], 151)
+
+        # User now enables forceOldFW='true' in Custom Configuration Parameters
+        mock_poly.updateJsonProfile.reset_mock()
+        mock_poly.updateProfile.reset_mock()
+        controller.customParamsHandler({'clientId': 'id', 'clientSecret': 'sec', 'forceOldFW': 'true'})
+
+        self.assertEqual(controller.time_uom, 58)
+        mock_poly.updateJsonProfile.assert_not_called()
+        mock_poly.updateProfile.assert_called()
+        # Existing node with time_uom=151 must have been deleted and recreated with time_uom=58
+        self.assertIn('99887766', deleted_addresses)
+        recreated_tstat = added_nodes[-1]
+        self.assertEqual(recreated_tstat.time_uom, 58)
+        recreated_drvs = {d['driver']: d for d in recreated_tstat.drivers}
+        self.assertEqual(recreated_drvs['TIME']['uom'], 58)
+        self.assertEqual(recreated_drvs['TIME']['name'], 'Time since node started')
+
 
 if __name__ == '__main__':
     unittest.main()

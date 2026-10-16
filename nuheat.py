@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 import time
 import requests
@@ -254,6 +255,228 @@ def _build_profile_definition(temp_unit: str = "F", time_uom: int = 151) -> dict
 
 register_profile_builder(_build_profile_definition)
 
+_STATIC_EDITORS_XML = """<editors>
+  <!-- Online Status -->
+  <editor id="ONLINE">
+    <range uom="2" subset="0,1" nls="ONLINE" />
+  </editor>
+
+  <!-- Heat State -->
+  <editor id="CLIHCS">
+    <range uom="25" subset="0,1" nls="CLIHCS" />
+  </editor>
+
+  <!-- Mode Selection -->
+  <editor id="MODESEL">
+    <range uom="25" subset="1,2,3" nls="MODE" />
+  </editor>
+
+  <!-- Temperature Fahrenheit (Display & Driver) -->
+  <editor id="TEMPF">
+    <range uom="17" min="41" max="104" prec="0" />
+  </editor>
+
+  <!-- Temperature Fahrenheit (Command Input) -->
+  <editor id="TEMPFINPUT">
+    <range uom="17" min="41" max="104" prec="0" step="1" />
+  </editor>
+
+  <!-- Temperature Celsius (Display & Driver) -->
+  <editor id="TEMPC">
+    <range uom="4" min="5" max="40" prec="0" />
+  </editor>
+
+  <!-- Temperature Celsius (Command Input) -->
+  <editor id="TEMPCINPUT">
+    <range uom="4" min="5" max="40" prec="0" step="1" />
+  </editor>
+
+
+  <!-- Hold Duration Minutes -->
+  <editor id="HOLDMINS">
+    <range uom="45" min="0" max="1440" prec="0" step="1" />
+  </editor>
+
+  <!-- Power / Energy (kWh) -->
+  <editor id="TPW">
+    <range uom="33" min="0" max="100000" prec="2" />
+  </editor>
+
+  <!-- Timestamp (Epoch seconds) -->
+  <editor id="TIMESTAMP">
+    <range uom="58" min="0" max="2147483647" prec="0" />
+  </editor>
+</editors>
+"""
+
+_STATIC_NODEDEFS_XML = """<nodeDefs>
+  <!-- Controller Node Definition -->
+  <nodeDef id="controller" nls="ctl">
+    <editors />
+    <sts>
+      <st id="ST" editor="ONLINE" />
+      <st id="TIME" editor="TIMESTAMP" />
+    </sts>
+    <cmds>
+      <sends>
+        <cmd id="DON" />
+        <cmd id="DOF" />
+      </sends>
+      <accepts>
+        <cmd id="UPDATE" />
+      </accepts>
+    </cmds>
+  </nodeDef>
+
+  <!-- Thermostat Node Definition (Fahrenheit) -->
+  <nodeDef id="thermostatf" nls="TSTAT">
+    <editors />
+    <sts>
+      <st id="ST" editor="TEMPF" />
+      <st id="CLISPH" editor="TEMPF" />
+      <st id="CLIMD" editor="MODESEL" />
+      <st id="CLIHCS" editor="CLIHCS" />
+      <st id="GV0" editor="TPW" />
+      <st id="GV1" editor="TPW" />
+      <st id="GV2" editor="TPW" />
+      <st id="GV3" editor="TPW" />
+      <st id="GV4" editor="HOLDMINS" />
+      <st id="GV5" editor="ONLINE" />
+      <st id="TIME" editor="TIMESTAMP" />
+    </sts>
+    <cmds>
+      <sends>
+      </sends>
+      <accepts>
+        <cmd id="UPDATE" />
+        <cmd id="SETAUTO" />
+        <cmd id="SETHOLD">
+          <p id="TEMPHOLDF" editor="TEMPFINPUT" init="CLISPH" />
+          <p id="HOLD" editor="HOLDMINS" init="GV4" />
+        </cmd>
+        <cmd id="SETPERMHOLD">
+          <p id="" editor="TEMPFINPUT" init="CLISPH" />
+        </cmd>
+      </accepts>
+    </cmds>
+  </nodeDef>
+
+  <!-- Thermostat Node Definition (Celsius) -->
+  <nodeDef id="thermostatc" nls="TSTAT">
+    <editors />
+    <sts>
+      <st id="ST" editor="TEMPC" />
+      <st id="CLISPH" editor="TEMPC" />
+      <st id="CLIMD" editor="MODESEL" />
+      <st id="CLIHCS" editor="CLIHCS" />
+      <st id="GV0" editor="TPW" />
+      <st id="GV1" editor="TPW" />
+      <st id="GV2" editor="TPW" />
+      <st id="GV3" editor="TPW" />
+      <st id="GV4" editor="HOLDMINS" />
+      <st id="GV5" editor="ONLINE" />
+      <st id="TIME" editor="TIMESTAMP" />
+    </sts>
+    <cmds>
+      <sends>
+      </sends>
+      <accepts>
+        <cmd id="UPDATE" />
+        <cmd id="SETAUTO" />
+        <cmd id="SETHOLD">
+          <p id="TEMPHOLDC" editor="TEMPCINPUT" init="CLISPH" />
+          <p id="HOLD" editor="HOLDMINS" init="GV4" />
+        </cmd>
+        <cmd id="SETPERMHOLD">
+          <p id="" editor="TEMPCINPUT" init="CLISPH" />
+        </cmd>
+      </accepts>
+    </cmds>
+  </nodeDef>
+</nodeDefs>
+"""
+
+_STATIC_NLS_TXT = """# Controller Node
+ND-controller-NAME=NuHeat Signature Controller
+ND-controller-ICON=Thermostat
+ST-ctl-ST-NAME=NodeServer Online
+ST-ctl-TIME-NAME=Time since node started
+CMD-ctl-UPDATE-NAME=Update
+CMD-ctl-DON-NAME=On
+CMD-ctl-DOF-NAME=Off
+
+# Thermostat Node (Fahrenheit & Celsius)
+ND-thermostatf-NAME=Thermostat Node
+ND-thermostatf-ICON=Thermostat
+ND-thermostatc-NAME=Thermostat Node
+ND-thermostatc-ICON=Thermostat
+
+ST-TSTAT-ST-NAME=Current Temperature
+ST-TSTAT-CLISPH-NAME=Heat Setpoint
+ST-TSTAT-CLIMD-NAME=Mode
+ST-TSTAT-CLIHCS-NAME=Heat State
+ST-TSTAT-GV0-NAME=Daily Energy
+ST-TSTAT-GV1-NAME=Last 7 Days Energy
+ST-TSTAT-GV2-NAME=Monthly Energy
+ST-TSTAT-GV3-NAME=Yearly Energy
+ST-TSTAT-GV4-NAME=Hold Time
+ST-TSTAT-GV5-NAME=Online
+ST-TSTAT-TIME-NAME=Time since node started
+
+CMD-TSTAT-UPDATE-NAME=Force Update
+CMD-TSTAT-SETAUTO-NAME=Set Auto
+CMD-TSTAT-SETHOLD-NAME=Set Hold
+CMDP-TEMPHOLDC-NAME=Hold Temperature
+CMDP-TEMPHOLDF-NAME=Hold Temperature
+CMDP-HOLD-NAME=Hold Minutes
+CMD-TSTAT-SETPERMHOLD-NAME=Set Permanent Temp
+
+# Discrete Value Subsets
+ONLINE-0=Offline
+ONLINE-1=Online
+
+CLIHCS-0=Idle
+CLIHCS-1=Heating
+
+MODE-1=Auto
+MODE-2=Hold
+MODE-3=Permanent Hold
+"""
+
+
+def _ensure_static_profile_files(profile_dir: str = None) -> None:
+    """Ensure static profile XML and NLS files on disk contain the canonical legacy ISY (< 5.8.0) definitions.
+    In PG3x, if updateJsonProfile ran on initial boot before forceOldFW was configured, PG3x overwrites
+    profile/editor/editors.xml and profile/nodedef/nodedefs.xml on disk with IoX 5.8+ definitions.
+    Restoring them ensures poly.updateProfile() uploads valid static XML/NLS files for older firmware.
+    """
+    if profile_dir is None:
+        profile_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "profile")
+
+    targets = [
+        (os.path.join(profile_dir, "editor", "editors.xml"), _STATIC_EDITORS_XML),
+        (os.path.join(profile_dir, "nodedef", "nodedefs.xml"), _STATIC_NODEDEFS_XML),
+        (os.path.join(profile_dir, "nls", "en_us.txt"), _STATIC_NLS_TXT),
+        (os.path.join(profile_dir, "version.txt"), f"{VERSION}\n"),
+    ]
+    for path, expected_content in targets:
+        try:
+            needs_write = False
+            if not os.path.isfile(path):
+                needs_write = True
+            else:
+                with open(path, "r", encoding="utf-8") as f:
+                    current = f.read()
+                if current.strip() != expected_content.strip():
+                    needs_write = True
+            if needs_write:
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(expected_content)
+                LOGGER.info(f"Restored canonical static profile file: {path}")
+        except Exception as err:
+            LOGGER.warning(f"Could not verify/restore static profile file {path}: {err}")
+
 
 class Controller(BaseNode):
     id = 'controller'
@@ -267,6 +490,11 @@ class Controller(BaseNode):
         self.poly = polyglot
         self.name = name
         self.customParams = Custom(polyglot, 'customparams')
+        if self.poly is not None:
+            try:
+                self.poly.customParams = self.customParams
+            except Exception:
+                pass
         self.Notices = getattr(polyglot, 'Notices', {})
         self.oauth = OAuth(polyglot)
         # Pre-register NuHeat OAuth endpoints so they are never missing in udi_interface.OAuth
@@ -286,6 +514,7 @@ class Controller(BaseNode):
         self.temp_unit = "F"
         self.temp_uom = 17
         self.time_uom = self._determine_time_uom()
+        self.drivers = [dict(d) for d in self.drivers]
         apply_driver_names(self, use_dynamic=self._is_dynamic_profile_supported(), time_uom=self.time_uom, temp_unit=self.temp_unit)
         self.tz = "America/New_York"
         self.disco = 0
@@ -311,6 +540,7 @@ class Controller(BaseNode):
         self.config_done = False
         self.configDone = False
         self.oauth_lock = threading.Lock()
+        self.discover_lock = threading.Lock()
 
         if hasattr(self.poly, 'addNode'):
             self.poly.addNode(self)
@@ -485,6 +715,7 @@ class Controller(BaseNode):
         # using the default static profile instead.
         if not self._is_dynamic_profile_supported():
             LOGGER.info("[_publish_profile] ISY firmware is old (< 5.8.0) or forceOldFW enabled; using default static profile and skipping updateJsonProfile")
+            _ensure_static_profile_files()
             if hasattr(self.poly, "updateProfile"):
                 try:
                     self.poly.updateProfile()
@@ -502,6 +733,7 @@ class Controller(BaseNode):
         update_json_profile = getattr(self.poly, "updateJsonProfile", None)
         if not callable(update_json_profile):
             LOGGER.info("[_publish_profile] updateJsonProfile is unavailable, falling back to updateProfile")
+            _ensure_static_profile_files()
             if hasattr(self.poly, "updateProfile"):
                 try:
                     self.poly.updateProfile()
@@ -575,6 +807,13 @@ class Controller(BaseNode):
                         else:
                             self.temp_unit = "F"
                             self.temp_uom = 17
+                        if hasattr(self, 'customParams') and hasattr(self.customParams, '__setitem__'):
+                            try:
+                                self._temp_unit_auto_default = True
+                                self._auto_populated_temp_unit = self.temp_unit
+                                self.customParams['temp_unit'] = self.temp_unit
+                            except Exception:
+                                pass
                         self.temp_unit_ready = True
                 except Exception as e:
                     LOGGER.warning(f"Could not retrieve NuHeat account temperature scale: {e}")
@@ -704,7 +943,7 @@ class Controller(BaseNode):
                 LOGGER.debug("OAuth configuration automatically populated from PG3 OAuth setup")
 
             elif key == 'oauthTokens':
-                if hasattr(self.oauth, 'customNsHandler'):
+                if data and hasattr(self.oauth, 'customNsHandler'):
                     self.oauth.customNsHandler(key, data)
 
             if key in ('oauth', 'oauthTokens'):
@@ -734,31 +973,54 @@ class Controller(BaseNode):
             LOGGER.error(f"Error in oauthHandler: {e}")
 
     def get_configured_temp_unit(self):
-        """Returns 'C', 'F', or None if not configured in customParams."""
+        """Returns 'C', 'F', or None if not explicitly configured in customParams."""
+        found = None
         for key in ('temp_unit', 'temp_unt', 'TEMP_UNIT', 'TEMP_UNT'):
             if key in self.customParams:
                 val = self.customParams[key]
                 if val:
                     raw = str(val).strip().upper()
                     if raw.startswith('C'):
-                        return 'C'
+                        found = 'C'
+                        break
                     elif raw.startswith('F'):
-                        return 'F'
+                        found = 'F'
+                        break
 
-        rawdata = getattr(self.customParams, '_rawdata', None)
-        if isinstance(rawdata, dict):
-            for key, val in rawdata.items():
-                if key.lower() in ('temp_unit', 'temp_unt'):
-                    raw = str(val).strip().upper()
-                    if raw.startswith('C'):
-                        return 'C'
-                    elif raw.startswith('F'):
-                        return 'F'
-        return None
+        if not found:
+            rawdata = getattr(self.customParams, '_rawdata', None)
+            if isinstance(rawdata, dict):
+                for key, val in rawdata.items():
+                    if key.lower() in ('temp_unit', 'temp_unt'):
+                        raw = str(val).strip().upper()
+                        if raw.startswith('C'):
+                            found = 'C'
+                            break
+                        elif raw.startswith('F'):
+                            found = 'F'
+                            break
+
+        if found and getattr(self, '_temp_unit_auto_default', False):
+            if found == getattr(self, '_auto_populated_temp_unit', 'F'):
+                return None
+        return found
 
     def customParamsHandler(self, data):
         LOGGER.debug(f"customParamsHandler called with {len(data) if hasattr(data, '__len__') else 'unknown'} params")
+        has_explicit_temp_unit = False
+        if isinstance(data, dict):
+            for k, v in data.items():
+                if str(k).lower() in ('temp_unit', 'temp_unt') and v:
+                    has_explicit_temp_unit = True
+                    break
+        self._temp_unit_auto_default = not has_explicit_temp_unit
+
         self.customParams.load(data)
+        if self.poly is not None:
+            try:
+                self.poly.customParams = self.customParams
+            except Exception:
+                pass
         if 'tz' in self.customParams and self.customParams['tz']:
             self.tz = self.customParams['tz']
         else:
@@ -773,10 +1035,11 @@ class Controller(BaseNode):
             self.temp_unit_ready = True
         else:
             # Pre-populate temp_unit so it displays in PG3 Custom Configuration Parameters
+            self._auto_populated_temp_unit = 'F'
             self.customParams['temp_unit'] = 'F'
             self.temp_unit = 'F'
             self.temp_uom = 17
-            self.temp_unit_ready = True
+            self.temp_unit_ready = False
 
         if self.temp_unit != prev_temp_unit:
             self.update_profile()
@@ -800,18 +1063,30 @@ class Controller(BaseNode):
         apply_driver_names(self, use_dynamic=self._is_dynamic_profile_supported(), time_uom=self.time_uom, temp_unit=self.temp_unit)
         if self.time_uom != prev_time_uom:
             LOGGER.info(f"Time UOM changed from {prev_time_uom} to {self.time_uom}")
-            self.setDriver('TIME', self.get_current_time(), uom=self.time_uom)
             self.update_profile()
-            get_nodes = getattr(self.poly, 'getNodes', None)
-            nodes = get_nodes() if callable(get_nodes) else getattr(self, 'nodes', {})
-            nodes_iterable = nodes.values() if isinstance(nodes, dict) else nodes
-            for node in nodes_iterable:
-                if hasattr(node, 'time_uom'):
-                    node.time_uom = self.time_uom
-                    apply_driver_names(node, use_dynamic=self._is_dynamic_profile_supported(), time_uom=self.time_uom, temp_unit=getattr(node, 'temp_unit', self.temp_unit))
-                    if hasattr(node, 'setDriver'):
-                        node_time = getattr(node, 'get_current_time', lambda: get_current_timestamp(self.time_uom, getattr(node, 'start_time', None)))()
-                        node.setDriver('TIME', node_time, uom=self.time_uom)
+            # Ensure udi_interface.Node.setDriver detects the UOM change even after apply_driver_names updated drv['uom']
+            for d in getattr(self, 'drivers', []):
+                if isinstance(d, dict) and d.get('driver') == 'TIME':
+                    d['uom'] = prev_time_uom
+            self.setDriver('TIME', self.get_current_time(), uom=self.time_uom)
+            if self.disco == 1:
+                LOGGER.info(f"Time UOM changed to {self.time_uom}; re-discovering nodes...")
+                self.discover()
+            else:
+                get_nodes = getattr(self.poly, 'getNodes', None)
+                nodes = get_nodes() if callable(get_nodes) else getattr(self, 'nodes', {})
+                nodes_iterable = nodes.values() if isinstance(nodes, dict) else nodes
+                for node in nodes_iterable:
+                    if hasattr(node, 'time_uom'):
+                        old_node_time_uom = getattr(node, 'time_uom', prev_time_uom)
+                        node.time_uom = self.time_uom
+                        apply_driver_names(node, use_dynamic=self._is_dynamic_profile_supported(), time_uom=self.time_uom, temp_unit=getattr(node, 'temp_unit', self.temp_unit))
+                        for d in getattr(node, 'drivers', []):
+                            if isinstance(d, dict) and d.get('driver') == 'TIME':
+                                d['uom'] = old_node_time_uom
+                        if hasattr(node, 'setDriver'):
+                            node_time = getattr(node, 'get_current_time', lambda: get_current_timestamp(self.time_uom, getattr(node, 'start_time', None)))()
+                            node.setDriver('TIME', node_time, uom=self.time_uom)
 
         self.update_oauth_config()
         self.handleCustomParamsDone = True
@@ -948,6 +1223,13 @@ class Controller(BaseNode):
         return False
 
     def discover(self, *args, **kwargs):
+        lock = getattr(self, 'discover_lock', None)
+        if lock is not None:
+            with lock:
+                return self._discover_impl(*args, **kwargs)
+        return self._discover_impl(*args, **kwargs)
+
+    def _discover_impl(self, *args, **kwargs):
         token = self.get_access_token()
         if not token:
             LOGGER.warning("Discover aborted: NuHeat is not authenticated.")
@@ -958,7 +1240,10 @@ class Controller(BaseNode):
         self._delete_notice('auth')
 
         # Wait and ensure temperature unit is resolved before creating nodes
+        prev_unit = self.temp_unit
         self._determine_temp_unit()
+        if self.temp_unit != prev_unit:
+            self.update_profile()
 
         thermostats = self.NuHeat.get_thermostat()
         if not thermostats:
@@ -1007,23 +1292,43 @@ class Controller(BaseNode):
             needs_deletion = False
             if existing_node is not None:
                 current_primary = None
+                existing_time_uom = None
                 if isinstance(existing_node, dict):
                     current_primary = existing_node.get('primaryNode') or existing_node.get('primary')
                     existing_id = existing_node.get('nodeDefId') or existing_node.get('id')
+                    existing_drivers = existing_node.get('drivers', [])
                 else:
                     current_primary = getattr(existing_node, 'primary', None) or getattr(existing_node, 'primaryNode', None)
                     existing_id = getattr(existing_node, 'id', None)
+                    existing_time_uom = getattr(existing_node, 'time_uom', None)
+                    existing_drivers = getattr(existing_node, 'drivers', [])
 
-                if (current_primary and current_primary != stat_address) or (existing_id and existing_id != target_node_id):
+                if existing_time_uom is None and isinstance(existing_drivers, list):
+                    for d in existing_drivers:
+                        if isinstance(d, dict) and d.get('driver') == 'TIME' and d.get('uom') is not None:
+                            try:
+                                existing_time_uom = int(d.get('uom'))
+                            except (ValueError, TypeError):
+                                pass
+                            break
+
+                if (
+                    (current_primary and current_primary != stat_address)
+                    or (existing_id and existing_id != target_node_id)
+                    or (existing_time_uom is not None and existing_time_uom != self.time_uom)
+                ):
                     LOGGER.info(
                         f"Node {stat_address} requires recreation (existing id={existing_id}, target={target_node_id}, "
-                        f"primary={current_primary}). Deleting before recreation..."
+                        f"primary={current_primary}, existing_time_uom={existing_time_uom}, target_time_uom={self.time_uom}). "
+                        f"Deleting before recreation..."
                     )
                     needs_deletion = True
 
             if needs_deletion and hasattr(self.poly, 'delNode'):
                 self._confirmed_node_addresses.discard(stat_address)
                 self.poly.delNode(stat_address)
+                if hasattr(self.poly, '_nodes') and isinstance(self.poly._nodes, dict):
+                    self.poly._nodes.pop(stat_address, None)
                 self._wait_for_node_deleted(stat_address, timeout=5.0)
 
             stat_node = target_node_cls(self.poly, stat_address, stat_address, name, self, temp_uom=self.temp_uom, time_uom=self.time_uom)
@@ -1055,6 +1360,8 @@ class Controller(BaseNode):
                     LOGGER.info(f"Removing legacy child node {child_addr} from PG3...")
                     if hasattr(self.poly, 'delNode'):
                         self.poly.delNode(child_addr)
+                        if hasattr(self.poly, '_nodes') and isinstance(self.poly._nodes, dict):
+                            self.poly._nodes.pop(child_addr, None)
                         self._wait_for_node_deleted(child_addr, timeout=3.0)
 
         self.disco = 1
