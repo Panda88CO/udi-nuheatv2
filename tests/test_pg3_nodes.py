@@ -103,8 +103,34 @@ class TestPG3Nodes(unittest.TestCase):
         self.assertEqual(override.get('auth_endpoint'), 'https://identity.mynuheat.com/connect/authorize')
         self.assertEqual(override.get('token_endpoint'), 'https://identity.mynuheat.com/connect/token')
         self.assertEqual(override.get('name'), 'Nuheat')
-        self.assertFalse(override.get('addRedirect'))
-        self.assertFalse(override.get('addScope'))
+        self.assertTrue(override.get('addRedirect'))
+        self.assertTrue(override.get('addScope'))
+
+    def test_nuheat_oauth_refresh_omits_redirect_and_scope_in_memory(self):
+        controller = Controller(self.mock_poly, 'controller', 'controller', 'NuHeat')
+        controller.customNsHandler('oauth', {'client_id': 'test_id', 'client_secret': 'test_sec'})
+        controller.customNsHandler('oauthTokens', {'refresh_token': 'ref_123', 'access_token': 'acc_123'})
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            'access_token': 'new_acc_456',
+            'refresh_token': 'new_ref_456',
+            'expires_in': 3600
+        }
+        with patch('udi_interface.oauth.requests.post', return_value=mock_resp) as mock_post:
+            controller.oauth._oAuthTokensRefresh()
+            mock_post.assert_called_once()
+            _, kwargs = mock_post.call_args
+            posted_data = kwargs.get('data', {})
+            self.assertEqual(posted_data.get('grant_type'), 'refresh_token')
+            self.assertEqual(posted_data.get('refresh_token'), 'ref_123')
+            self.assertNotIn('redirect_uri', posted_data)
+            self.assertNotIn('scope', posted_data)
+
+        # Verify addRedirect and addScope remain True in _oauthConfig after refresh
+        self.assertTrue(controller.oauth._oauthConfig['addRedirect'])
+        self.assertTrue(controller.oauth._oauthConfig['addScope'])
 
     def test_controller_token_refresh_and_expired_token_handling(self):
         controller = Controller(self.mock_poly, 'controller', 'controller', 'NuHeat')

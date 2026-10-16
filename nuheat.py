@@ -50,6 +50,48 @@ except ImportError:
         def oauthHandler(self, token):
             pass
 
+
+class NuHeatOAuth(OAuth):
+    """OAuth wrapper that keeps addRedirect=True and addScope=True in PG3's database
+    (required by PG3x for the initial authorization_code exchange when clicking Authenticate),
+    while omitting redirect_uri and scope in memory during Python refresh_token renewals
+    (required by NuHeat's IdentityServer4 token endpoint).
+    """
+
+    def _oAuthTokensRefresh(self):
+        cfg = getattr(self, '_oauthConfig', None)
+        if cfg is not None and hasattr(cfg, '__dict__') and '_rawdata' in cfg.__dict__:
+            raw = cfg.__dict__.get('_rawdata')
+        elif isinstance(cfg, dict):
+            raw = cfg
+        else:
+            raw = None
+
+        had_redirect = False
+        orig_redirect = None
+        had_scope = False
+        orig_scope = None
+        if isinstance(raw, dict):
+            had_redirect = 'addRedirect' in raw
+            orig_redirect = raw.get('addRedirect')
+            had_scope = 'addScope' in raw
+            orig_scope = raw.get('addScope')
+            raw['addRedirect'] = False
+            raw['addScope'] = False
+        try:
+            if hasattr(super(), '_oAuthTokensRefresh'):
+                return super()._oAuthTokensRefresh()
+        finally:
+            if isinstance(raw, dict):
+                if had_redirect:
+                    raw['addRedirect'] = orig_redirect
+                else:
+                    raw.pop('addRedirect', None)
+                if had_scope:
+                    raw['addScope'] = orig_scope
+                else:
+                    raw.pop('addScope', None)
+
 from nodes import ThermostatNode
 from nodes import ThermostatNode_F
 from nodes import ThermostatNode_C
@@ -496,15 +538,15 @@ class Controller(BaseNode):
             except Exception:
                 pass
         self.Notices = getattr(polyglot, 'Notices', {})
-        self.oauth = OAuth(polyglot)
+        self.oauth = NuHeatOAuth(polyglot)
         # Pre-register NuHeat OAuth endpoints so they are never missing in udi_interface.OAuth
         oauth_defaults = {
             'name': 'Nuheat',
             'auth_endpoint': 'https://identity.mynuheat.com/connect/authorize',
             'token_endpoint': 'https://identity.mynuheat.com/connect/token',
             'scope': 'openapi openid profile offline_access',
-            'addScope': False,
-            'addRedirect': False
+            'addScope': True,
+            'addRedirect': True
         }
         if hasattr(self.oauth, 'updateOauthSettings'):
             self.oauth.updateOauthSettings(oauth_defaults)
@@ -539,6 +581,7 @@ class Controller(BaseNode):
         self.customNsHandlerDone = False
         self.config_done = False
         self.configDone = False
+        self._start_checked_auth = False
         self.oauth_lock = threading.Lock()
         self.discover_lock = threading.Lock()
 
@@ -561,6 +604,17 @@ class Controller(BaseNode):
             if hasattr(self.poly, 'STOP') and hasattr(self, 'stop'):
                 self.poly.subscribe(self.poly.STOP, self.stop)
             self.poly.subscribe(self.poly.DISCOVER, self.discover)
+
+    def _set_notice(self, key, message):
+        """Set a notice only if its text has changed to avoid duplicate saves to Polyglot."""
+        notices = self.Notices if hasattr(self, 'Notices') and self.Notices is not None else getattr(self.poly, 'Notices', None)
+        if notices is not None and hasattr(notices, '__setitem__'):
+            try:
+                existing = notices.get(key) if hasattr(notices, 'get') else (notices[key] if key in notices else None)
+                if existing != message:
+                    notices[key] = message
+            except Exception:
+                pass
 
     def _delete_notice(self, key):
         """Safely delete a notice from self.Notices or self.poly.Notices across dict and Custom object interfaces."""
@@ -843,8 +897,7 @@ class Controller(BaseNode):
                                 f"NuHeat access token is expired ({expiry}) and token refresh failed. "
                                 "Please click 'Authenticate' in the PG3 dashboard to re-link your NuHeat account."
                             )
-                            if hasattr(self.Notices, '__setitem__'):
-                                self.Notices['auth'] = "NuHeat authorization expired. Please click 'Authenticate' in the PG3 dashboard to link your NuHeat account."
+                            self._set_notice('auth', "NuHeat authorization expired. Please click 'Authenticate' in the PG3 dashboard to link your NuHeat account.")
                             return None
                     except (ValueError, TypeError):
                         pass
@@ -853,8 +906,7 @@ class Controller(BaseNode):
             return token
         except (ValueError, KeyError, AttributeError) as e:
             LOGGER.debug(f"NuHeat getAccessToken: {e}")
-            if hasattr(self.Notices, '__setitem__'):
-                self.Notices['auth'] = "Please click 'Authenticate' in the PG3 dashboard to link your NuHeat account."
+            self._set_notice('auth', "Please click 'Authenticate' in the PG3 dashboard to link your NuHeat account.")
             return None
 
     def is_oauth_configured(self):
@@ -864,7 +916,7 @@ class Controller(BaseNode):
         client_secret = self.client_secret or (oauth_cfg.get('client_secret') if hasattr(oauth_cfg, 'get') else None) or (override.get('client_secret') if hasattr(override, 'get') else None)
         return bool(client_id and client_secret)
 
-    def update_oauth_config(self):
+    def update_oauth_config(self, skip_custom_ns_init: bool = False):
         """Updates OAuth settings if credentials were provided in customParams, customNs, or controller attributes."""
         with self.oauth_lock:
             client_id = self.client_id or self.customParams.get('clientId') or self.customParams.get('client_id')
@@ -880,13 +932,13 @@ class Controller(BaseNode):
                     'auth_endpoint': 'https://identity.mynuheat.com/connect/authorize',
                     'token_endpoint': 'https://identity.mynuheat.com/connect/token',
                     'scope': 'openapi openid profile offline_access',
-                    'addScope': False,
-                    'addRedirect': False
+                    'addScope': True,
+                    'addRedirect': True
                 }
                 if hasattr(self.oauth, 'updateOauthSettings'):
                     self.oauth.updateOauthSettings(oauth_cfg)
                 # If customNsHandler('oauth') hasn't initialized _oauthConfig, initialize it now
-                if hasattr(self.oauth, '_oauthConfigInitialized') and not self.oauth._oauthConfigInitialized:
+                if not skip_custom_ns_init and hasattr(self.oauth, '_oauthConfigInitialized') and not self.oauth._oauthConfigInitialized:
                     if hasattr(self.oauth, 'customNsHandler'):
                         self.oauth.customNsHandler('oauth', {})
                 self._delete_notice('oauth_creds')
@@ -900,7 +952,7 @@ class Controller(BaseNode):
 
             if key == 'oauth':
                 # Check if credentials exist in customparams or controller attributes
-                self.update_oauth_config()
+                self.update_oauth_config(skip_custom_ns_init=True)
 
                 # Extract credentials if PG3 OAuth setup provided them in data
                 client_id = data.get('client_id') or data.get('clientId') or self.client_id
@@ -930,8 +982,8 @@ class Controller(BaseNode):
                     'auth_endpoint': 'https://identity.mynuheat.com/connect/authorize',
                     'token_endpoint': 'https://identity.mynuheat.com/connect/token',
                     'scope': 'openapi openid profile offline_access',
-                    'addScope': False,
-                    'addRedirect': False
+                    'addScope': True,
+                    'addRedirect': True
                 }
                 if hasattr(self.oauth, 'updateOauthSettings'):
                     self.oauth.updateOauthSettings(oauth_cfg)
@@ -945,8 +997,16 @@ class Controller(BaseNode):
             elif key == 'oauthTokens':
                 if data and hasattr(self.oauth, 'customNsHandler'):
                     self.oauth.customNsHandler(key, data)
+                    self._delete_notice('auth')
+                    if getattr(self, '_start_checked_auth', False) and self.disco == 0:
+                        token = self.get_access_token()
+                        if token:
+                            self._delete_notice('auth')
+                            self._determine_temp_unit()
+                            self.discover()
+                            self.longPoll()
 
-            if key in ('oauth', 'oauthTokens'):
+            if key in ('oauth', 'oauthTokens', None):
                 self.customNsDone = True
                 self.customNsHandlerDone = True
             LOGGER.debug(f"customNsHandler finished for {key}")
@@ -968,7 +1028,9 @@ class Controller(BaseNode):
             self.oauth.oauthHandler(token)
             self._delete_notice('auth')
             LOGGER.info("NuHeat OAuth token received successfully!")
+            self._determine_temp_unit()
             self.discover()
+            self.longPoll()
         except Exception as e:
             LOGGER.error(f"Error in oauthHandler: {e}")
 
@@ -1116,12 +1178,12 @@ class Controller(BaseNode):
 
         if not self.is_oauth_configured():
             LOGGER.warning("NuHeat OAuth credentials (clientId & clientSecret) are missing. Please configure them in PG3.")
-            if hasattr(self.Notices, '__setitem__'):
-                self.Notices['oauth_creds'] = "OAuth credentials required: Please configure 'clientId' and 'clientSecret' in Custom Configuration Parameters."
+            self._set_notice('oauth_creds', "OAuth credentials required: Please configure 'clientId' and 'clientSecret' in Custom Configuration Parameters.")
         else:
             self._delete_notice('oauth_creds')
 
         token = self.get_access_token()
+        self._start_checked_auth = True
         if token:
             self._delete_notice('auth')
             # Wait to determine temperature unit before creating nodes
@@ -1130,8 +1192,7 @@ class Controller(BaseNode):
             self.longPoll()
         else:
             LOGGER.warning("NuHeat is not authenticated. Please click 'Authenticate' in the PG3 dashboard.")
-            if hasattr(self.Notices, '__setitem__'):
-                self.Notices['auth'] = "Please click 'Authenticate' in the PG3 dashboard to link your NuHeat account."
+            self._set_notice('auth', "Please click 'Authenticate' in the PG3 dashboard to link your NuHeat account.")
 
     def poll(self, polltype):
         if 'shortPoll' in polltype:
